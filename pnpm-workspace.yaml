@@ -1,0 +1,8 @@
+allowBuilds:
+  '@google/genai': true
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+  protobufjs: true
+minimumReleaseAgeExclude:
+  - lucide-react@1.26.0

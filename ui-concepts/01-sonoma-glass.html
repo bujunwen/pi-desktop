@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Desktop · Sonoma Glass</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --text: #f6f7fb;
+      --muted: #949baa;
+      --line: #ffffff14;
+      --glass: #171b24b8;
+      --blue: #83a9ff;
+      --green: #6ce0ae;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+      color: var(--text);
+      background: #0b0d12;
+    }
+    * { box-sizing: border-box; }
+    body { width: 100vw; height: 100vh; margin: 0; overflow: hidden; background: #090b10; }
+    button, textarea { color: inherit; font: inherit; }
+    button { border: 0; cursor: pointer; }
+    .aurora { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(circle at 55% 105%, #142949 0, #090b10 52%); }
+    .aurora::before, .aurora::after { content: ""; position: absolute; width: 58vw; height: 58vw; border-radius: 50%; filter: blur(100px); opacity: .24; animation: drift 15s ease-in-out infinite alternate; }
+    .aurora::before { top: -35vw; left: 20vw; background: #446ee8; }
+    .aurora::after { right: -28vw; bottom: -34vw; background: #7b4bd9; animation-delay: -7s; }
+    @keyframes drift { to { transform: translate3d(7vw, 5vh, 0) scale(1.12); } }
+    .window { position: relative; display: grid; grid-template-columns: 252px minmax(0,1fr); width: calc(100vw - 28px); height: calc(100vh - 28px); margin: 14px; overflow: hidden; background: #10141ccc; border: 1px solid #ffffff1a; border-radius: 18px; box-shadow: 0 30px 100px #000b, inset 0 1px #ffffff0d; backdrop-filter: blur(36px) saturate(140%); }
+    .sidebar { position: relative; display: flex; min-width: 0; flex-direction: column; padding: 18px 13px 14px; background: linear-gradient(180deg,#232a38b8,#171c27a8); border-right: 1px solid var(--line); }
+    .traffic { display: flex; gap: 8px; height: 31px; padding: 4px 2px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px #0004; }
+    .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+    .brand { display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 8px 7px; font-size: 14px; font-weight: 650; letter-spacing: -.02em; }
+    .brand .mark { display: grid; width: 24px; height: 24px; place-items: center; background: linear-gradient(145deg,#9bbaff,#657feb); border-radius: 7px; box-shadow: 0 6px 18px #5272d966; font-size: 11px; }
+    .nav { display: grid; gap: 3px; }
+    .nav button, .project { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; color: #c6cad3; background: transparent; border-radius: 8px; font-size: 12px; text-align: left; transition: .18s ease; }
+    .nav button:hover, .project:hover { color: white; background: #ffffff0c; transform: translateX(2px); }
+    .nav svg, .project svg { width: 15px; opacity: .85; }
+    .section-title { padding: 27px 10px 9px; color: #6f7786; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .project { height: 36px; }
+    .project.active { color: white; background: linear-gradient(90deg,#ffffff16,#ffffff08); box-shadow: inset 0 0 0 1px #ffffff0b; }
+    .project .count { margin-left: auto; color: #7f8796; font: 10px ui-monospace, monospace; }
+    .sessions { padding: 3px 0 8px 34px; }
+    .session { position: relative; display: block; width: 100%; padding: 7px 8px; overflow: hidden; color: #7e8696; background: transparent; border-radius: 7px; font-size: 11px; text-align: left; text-overflow: ellipsis; white-space: nowrap; transition: .18s; }
+    .session::before { content: ""; position: absolute; top: 0; bottom: 0; left: -17px; width: 1px; background: #ffffff0e; }
+    .session:hover, .session.active { color: #dfe3ec; background: #ffffff09; }
+    .profile { display: flex; align-items: center; gap: 9px; height: 44px; padding: 8px; margin-top: auto; background: #ffffff08; border: 1px solid #ffffff09; border-radius: 11px; font-size: 11px; }
+    .avatar { display: grid; width: 26px; height: 26px; place-items: center; color: #0d2530; background: linear-gradient(145deg,#83f0c0,#56cfa7); border-radius: 8px; font-size: 9px; font-weight: 800; }
+    .profile small { display: block; margin-top: 2px; color: #737b8a; }
+    .profile .gear { margin-left: auto; color: #7c8492; background: transparent; font-size: 15px; }
+    .workspace { position: relative; min-width: 0; overflow: hidden; background: linear-gradient(180deg,#11151db8,#0d1017d6); }
+    .topbar { position: absolute; z-index: 4; top: 0; right: 0; left: 0; display: flex; align-items: center; height: 58px; padding: 0 22px; background: linear-gradient(#11151df2,#11151db8 65%,transparent); }
+    .crumb { display: flex; align-items: center; gap: 8px; min-width: 0; color: #848c9a; font-size: 11px; }
+    .crumb b { color: #dfe3eb; font-weight: 560; }
+    .status { display: flex; align-items: center; gap: 7px; padding: 6px 10px; margin-left: auto; color: #99a1af; background: #ffffff08; border: 1px solid #ffffff0a; border-radius: 999px; font-size: 10px; }
+    .status i { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 12px var(--green); }
+    .scroll { height: 100%; overflow-y: auto; padding: 78px 28px 190px; scrollbar-width: thin; scrollbar-color: #ffffff18 transparent; }
+    .thread { width: min(760px,100%); margin: 0 auto; }
+    .day { display: flex; align-items: center; gap: 12px; margin: 2px 0 28px; color: #5d6573; font-size: 10px; }
+    .day::before, .day::after { content:""; height: 1px; flex: 1; background: linear-gradient(90deg,transparent,#ffffff0d); } .day::after { transform: scaleX(-1); }
+    .user { width: fit-content; max-width: 72%; padding: 11px 14px; margin: 0 0 24px auto; background: linear-gradient(145deg,#37425a,#293346); border: 1px solid #ffffff13; border-radius: 16px 16px 5px 16px; box-shadow: 0 12px 35px #0004; font-size: 13px; line-height: 1.55; }
+    .assistant { margin-bottom: 16px; color: #d6dae3; font-size: 13px; line-height: 1.72; }
+    .assistant .label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #778091; font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+    .assistant .spark { display: grid; width: 22px; height: 22px; place-items: center; color: var(--blue); background: #7da5ff16; border: 1px solid #83a9ff22; border-radius: 7px; }
+    .assistant p { margin: 0 0 13px; }
+    .tool { margin: 12px 0 16px; overflow: hidden; background: linear-gradient(180deg,#181d27d9,#131720d9); border: 1px solid #ffffff10; border-radius: 13px; box-shadow: 0 14px 40px #0003; transition: border-color .2s, transform .2s; }
+    .tool:hover { border-color: #ffffff1e; transform: translateY(-1px); }
+    .tool-head { display: grid; grid-template-columns: 26px auto 1fr auto; align-items: center; gap: 9px; width: 100%; height: 47px; padding: 0 12px; color: #bec3ce; background: transparent; text-align: left; }
+    .tool-icon { display: grid; width: 26px; height: 26px; place-items: center; color: #9bb7ff; background: #779dff16; border-radius: 7px; }
+    .tool-head b { font: 600 11px ui-monospace, "SFMono-Regular", monospace; }
+    .tool-head span { overflow: hidden; color: #687080; font: 10px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .chev { color: #687080; transition: transform .25s; }
+    .tool.open .chev { transform: rotate(180deg); }
+    .tool-body { display: none; padding: 12px 14px; color: #8f97a5; background: #090c12aa; border-top: 1px solid #ffffff0b; font: 10px/1.65 ui-monospace, monospace; white-space: pre-wrap; }
+    .tool.open .tool-body { display: block; animation: reveal .28s ease both; }
+    @keyframes reveal { from { opacity:0; transform: translateY(-5px); } }
+    .result { display: flex; gap: 9px; padding: 11px 13px; color: #a8e0c8; background: #57d4a50c; border: 1px solid #57d4a51c; border-radius: 11px; font-size: 11px; }
+    .composer-shell { position: absolute; z-index: 5; right: max(24px,calc((100% - 720px)/2)); bottom: 20px; left: max(24px,calc((100% - 720px)/2)); }
+    .composer { position: relative; overflow: hidden; background: #252b37d9; border: 1px solid #ffffff1c; border-radius: 19px; box-shadow: 0 24px 75px #0009, inset 0 1px #ffffff0c; backdrop-filter: blur(32px) saturate(150%); transition: border-color .25s, transform .25s, box-shadow .25s; }
+    .composer:focus-within { border-color: #91afff5c; transform: translateY(-2px); box-shadow: 0 30px 90px #000b, 0 0 0 4px #789aff0b; }
+    .context { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; color: #87909f; border-bottom: 1px solid #ffffff0b; font-size: 10px; }
+    .context .pill { padding: 4px 7px; color: #aeb6c4; background: #ffffff09; border-radius: 6px; }
+    .context .model { margin-left: auto; }
+    textarea { display: block; width: 100%; height: 67px; padding: 14px 15px 6px; resize: none; color: #eef1f7; background: transparent; border: 0; outline: 0; font-size: 13px; line-height: 1.5; }
+    textarea::placeholder { color: #677080; }
+    .compose-bottom { display: flex; align-items: center; height: 39px; padding: 0 9px 8px 14px; }
+    .access { display: flex; align-items: center; gap: 6px; color: #6f7887; font-size: 10px; }
+    .access i { width: 5px; height: 5px; background: var(--green); border-radius: 50%; }
+    .hint { margin-left: auto; margin-right: 10px; color: #5f6775; font-size: 9px; }
+    .send { display: grid; width: 30px; height: 30px; place-items: center; color: #101622; background: linear-gradient(145deg,#a8c0ff,#7599f5); border-radius: 10px; box-shadow: 0 7px 20px #557af048; transition: transform .2s, filter .2s; }
+    .send:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.08); }
+    .send.sent { animation: send .48s ease; }
+    @keyframes send { 50% { transform: translate(7px,-7px) scale(.85); opacity:.3; } }
+    .back { position: fixed; z-index: 9; top: 29px; right: 29px; display: grid; width: 30px; height: 30px; place-items: center; color: #8d96a5; background: #11151dcc; border: 1px solid #ffffff12; border-radius: 9px; text-decoration: none; backdrop-filter: blur(18px); }
+    @media (max-width: 780px) { .window { grid-template-columns: 74px 1fr; } .sidebar { padding-inline: 10px; } .brand span, .nav span, .section-title, .project span, .project .count, .sessions, .profile > :not(.avatar) { display:none; } .brand, .nav button, .project { justify-content:center; } .profile { justify-content:center; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="aurora"></div>
+  <a class="back" href="index.html" title="返回方案列表">×</a>
+  <div class="window">
+    <aside class="sidebar">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="brand"><b class="mark">π</b><span>Pi Desktop</span></div>
+      <nav class="nav">
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg><span>新建任务</span></button>
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>添加项目</span></button>
+        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><span>搜索会话</span></button>
+      </nav>
+      <div class="section-title">Workspace</div>
+      <button class="project active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>pi-desktop</span><b class="count">04</b></button>
+      <div class="sessions">
+        <button class="session active">重新设计应用界面</button>
+        <button class="session">优化 Agent 启动速度</button>
+        <button class="session">修复会话滚动位置</button>
+      </div>
+      <button class="project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>gztx-policy-manage</span><b class="count">02</b></button>
+      <button class="project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>Study</span><b class="count">07</b></button>
+      <div class="profile"><span class="avatar">PI</span><span>本地工作区<small>Agent 已连接</small></span><button class="gear">⚙</button></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div class="crumb"><span>pi-desktop</span><span>/</span><b>重新设计应用界面</b></div><div class="status"><i></i>运行正常</div></header>
+      <div class="scroll">
+        <article class="thread">
+          <div class="day">今天 14:32</div>
+          <div class="user">现在的 UI 有点沉闷，帮我重新设计得更简约、更像 macOS。</div>
+          <section class="assistant">
+            <div class="label"><span class="spark">✦</span>Pi Agent</div>
+            <p>我会先梳理现有界面的信息层级，再建立一套更轻、更有呼吸感的视觉系统。</p>
+            <div class="tool open">
+              <button class="tool-head"><span class="tool-icon">⌘</span><b>inspect_workspace</b><span>src/renderer/src/App.tsx</span><span class="chev">⌄</span></button>
+              <div class="tool-body">Reading interface structure…
+Found 12 primary components
+Mapped 3 interaction layers
+No blocking dependencies</div>
+            </div>
+            <p>现有功能结构可以保留。重点调整侧栏材质、消息节奏、工具调用密度，以及输入区与正文的空间关系。</p>
+            <div class="tool">
+              <button class="tool-head"><span class="tool-icon">◇</span><b>create_prototype</b><span>ui-concepts/01-sonoma-glass.html</span><span class="chev">⌄</span></button>
+              <div class="tool-body">Prototype ready
+Motion system: spring / 240ms
+Contrast check: passed</div>
+            </div>
+            <div class="result"><span>✓</span><span>原型已生成。工具过程默认收起，仅保留任务状态与关键结果。</span></div>
+          </section>
+        </article>
+      </div>
+      <div class="composer-shell">
+        <div class="composer">
+          <div class="context"><span class="pill">⌘ pi-desktop</span><span>已信任</span><span class="model">gpt-5.6-sol · high</span></div>
+          <textarea id="prompt" placeholder="描述你想完成的事情…"></textarea>
+          <div class="compose-bottom"><span class="access"><i></i>完全访问</span><span class="hint">↵ 发送 · ⇧↵ 换行</span><button class="send" id="send">↑</button></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    document.querySelectorAll(".tool-head").forEach((button) => button.addEventListener("click", () => button.parentElement.classList.toggle("open")));
+    const send = document.querySelector("#send");
+    const prompt = document.querySelector("#prompt");
+    send.addEventListener("click", () => { if (!prompt.value.trim()) return prompt.focus(); send.classList.remove("sent"); void send.offsetWidth; send.classList.add("sent"); prompt.value = ""; });
+    prompt.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send.click(); } });
+  </script>
+</body>
+</html>

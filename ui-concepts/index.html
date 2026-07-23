@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Desktop · UI Concepts</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+      background: #0b0c0f;
+      color: #f5f5f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(circle at 16% -5%, #2a3552 0, transparent 32%),
+        radial-gradient(circle at 90% 0%, #312540 0, transparent 28%),
+        #0b0c0f;
+    }
+    main { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 80px 0 96px; }
+    .eyebrow { color: #8d93a1; font-size: 12px; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { max-width: 680px; margin: 14px 0 12px; font-size: clamp(38px, 5vw, 64px); font-weight: 620; letter-spacing: -.055em; line-height: 1.02; }
+    .intro { max-width: 600px; margin: 0; color: #aeb3be; font-size: 17px; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 54px; }
+    .card {
+      position: relative;
+      min-height: 430px;
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+      background: #15171c;
+      border: 1px solid #ffffff12;
+      border-radius: 26px;
+      box-shadow: 0 26px 70px #0008;
+      transition: transform .45s cubic-bezier(.2,.75,.2,1), border-color .3s, box-shadow .3s;
+    }
+    .card:hover { transform: translateY(-9px); border-color: #ffffff28; box-shadow: 0 38px 90px #000a; }
+    .preview {
+      position: relative;
+      height: 270px;
+      overflow: hidden;
+      background: var(--bg);
+      border-bottom: 1px solid #ffffff10;
+    }
+    .preview::before {
+      content: "";
+      position: absolute;
+      inset: 24px 18px 0;
+      background: var(--panel);
+      border: 1px solid #ffffff13;
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 18px 60px #0006;
+    }
+    .preview::after {
+      content: "";
+      position: absolute;
+      top: 44px;
+      right: 42px;
+      width: 50%;
+      height: 7px;
+      background: var(--accent);
+      border-radius: 99px;
+      box-shadow: 0 24px 0 var(--line), 0 48px 0 var(--line), 0 96px 0 var(--line);
+      opacity: .8;
+    }
+    .mini-side { position: absolute; z-index: 1; top: 25px; bottom: 0; left: 19px; width: 32%; background: var(--side); border-right: 1px solid #ffffff10; border-radius: 11px 0 0; }
+    .dots { position: absolute; z-index: 2; top: 35px; left: 31px; display: flex; gap: 4px; }
+    .dots i { width: 5px; height: 5px; border-radius: 50%; background: #ff605c; }
+    .dots i:nth-child(2) { background: #ffbd44; }
+    .dots i:nth-child(3) { background: #00ca4e; }
+    .copy { padding: 24px 25px 26px; }
+    .number { color: #777d89; font: 600 11px ui-monospace, monospace; letter-spacing: .1em; }
+    h2 { margin: 10px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
+    .copy p { margin: 0; color: #949aa6; font-size: 14px; line-height: 1.55; }
+    .arrow { position: absolute; right: 23px; bottom: 23px; display: grid; width: 34px; height: 34px; place-items: center; background: #ffffff0b; border: 1px solid #ffffff10; border-radius: 50%; transition: transform .3s, background .3s; }
+    .card:hover .arrow { transform: translate(3px, -3px); background: #ffffff18; }
+    footer { margin-top: 34px; color: #656b76; font-size: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .card { min-height: 380px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Pi Desktop · Interface Study</div>
+    <h1>三种更像 macOS 的工作方式。</h1>
+    <p class="intro">同一套产品能力，分别探索通透、专业与明亮三种方向。点击任意方案进入可交互原型。</p>
+    <section class="grid">
+      <a class="card" href="01-sonoma-glass.html" style="--bg:#10141c;--panel:#1b202aaa;--side:#202632cc;--accent:#81aaff;--line:#657083">
+        <div class="preview"><div class="mini-side"></div><div class="dots"><i></i><i></i><i></i></div></div>
+        <div class="copy"><span class="number">CONCEPT 01</span><h2>Sonoma Glass</h2><p>深色通透材质、冷蓝光感与漂浮式工作台。</p></div>
+        <span class="arrow">↗</span>
+      </a>
+      <a class="card" href="02-graphite-studio.html" style="--bg:#0e0f11;--panel:#17181b;--side:#111214;--accent:#b8f26a;--line:#4f5258">
+        <div class="preview"><div class="mini-side"></div><div class="dots"><i></i><i></i><i></i></div></div>
+        <div class="copy"><span class="number">CONCEPT 02</span><h2>Graphite Studio</h2><p>克制石墨黑、清晰结构与专业工具质感。</p></div>
+        <span class="arrow">↗</span>
+      </a>
+      <a class="card" href="03-porcelain-light.html" style="--bg:#dce4ef;--panel:#f7f8fbe8;--side:#e8ebf1;--accent:#2b72ff;--line:#aeb8c8">
+        <div class="preview"><div class="mini-side"></div><div class="dots"><i></i><i></i><i></i></div></div>
+        <div class="copy"><span class="number">CONCEPT 03</span><h2>Porcelain Light</h2><p>明亮原生窗口、柔和留白与内容优先的阅读感。</p></div>
+        <span class="arrow">↗</span>
+      </a>
+    </section>
+    <footer>所有方案均为独立 HTML，可直接在浏览器中预览。</footer>
+  </main>
+</body>
+</html>

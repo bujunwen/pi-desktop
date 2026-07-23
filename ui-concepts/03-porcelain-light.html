@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Desktop · Porcelain Light</title>
+  <style>
+    :root { color-scheme:light; --ink:#1d2430; --muted:#768091; --blue:#2878ff; --line:#dfe3ea; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;color:var(--ink);background:#dce2eb; }
+    *{box-sizing:border-box} body{width:100vw;height:100vh;margin:0;overflow:hidden;background:radial-gradient(circle at 65% 10%,#f5f7fb,#d9e0e9 60%,#ccd5e1)}
+    button,textarea{color:inherit;font:inherit}button{border:0;cursor:pointer}
+    .window{position:relative;display:grid;grid-template-columns:268px minmax(0,1fr);width:calc(100vw - 32px);height:calc(100vh - 32px);margin:16px;overflow:hidden;background:#f8f9fbdd;border:1px solid #fff;border-radius:19px;box-shadow:0 32px 100px #31425835,0 2px 8px #23344a14;backdrop-filter:blur(30px)}
+    .sidebar{display:flex;min-width:0;flex-direction:column;padding:17px 14px 13px;background:linear-gradient(180deg,#e8ecf3e8,#e3e8f0d9);border-right:1px solid #ccd3de}
+    .top-row{display:flex;align-items:center;height:36px}.traffic{display:flex;gap:7px;padding-left:1px}.traffic i{width:11px;height:11px;border-radius:50%;background:#ff5f57;border:.5px solid #d84a43}.traffic i:nth-child(2){background:#febc2e;border-color:#dca122}.traffic i:nth-child(3){background:#28c840;border-color:#1eaa34}
+    .brand{margin-left:auto;margin-right:auto;padding-right:37px;font-size:12px;font-weight:650;letter-spacing:-.01em}
+    .primary{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;height:34px;margin:8px 0 14px;color:white;background:linear-gradient(180deg,#3786ff,#216fee);border:1px solid #1c64dd;border-radius:9px;box-shadow:0 5px 14px #2878ff29,inset 0 1px #ffffff40;font-size:11px;font-weight:560;transition:.2s}
+    .primary:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 8px 20px #2878ff35}
+    .search{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;margin-bottom:20px;color:#8992a0;background:#f6f8fb99;border:1px solid #d5dbe5;border-radius:8px;font-size:10px}
+    .search kbd{margin-left:auto;color:#a2a9b5;font:9px ui-monospace,monospace}
+    .section{padding:0 8px 7px;color:#8992a1;font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .project{display:flex;align-items:center;gap:9px;width:100%;height:34px;padding:0 9px;color:#5e6877;background:transparent;border-radius:8px;font-size:11px;text-align:left;transition:.18s}
+    .project:hover{background:#ffffff7d}.project.active{color:#253047;background:#ffffffc2;box-shadow:0 1px 4px #35476010,inset 0 0 0 1px #ffffff}
+    .folder{position:relative;width:14px;height:10px;background:#7198d8;border-radius:2px}.folder::before{content:"";position:absolute;top:-3px;left:1px;width:6px;height:4px;background:#7198d8;border-radius:2px 2px 0 0}
+    .project small{margin-left:auto;color:#9aa3b0;font-size:9px}
+    .sessions{padding:3px 0 11px 29px}.sessions button{display:block;width:100%;padding:6px 8px;overflow:hidden;color:#8992a0;background:transparent;border-radius:6px;font-size:10px;text-align:left;text-overflow:ellipsis;white-space:nowrap}.sessions button.active{color:#3d4a5f;background:#ffffff72}
+    .account{display:flex;align-items:center;gap:9px;padding:9px;margin-top:auto;background:#f7f9fca8;border:1px solid #d9dfe8;border-radius:11px;font-size:10px}.avatar{display:grid;width:26px;height:26px;place-items:center;color:#fff;background:linear-gradient(145deg,#5b91ed,#326bc9);border-radius:50%;font-size:8px;font-weight:800;box-shadow:0 3px 8px #2d65c735}.account small{display:block;margin-top:2px;color:#969eaa}.account button{margin-left:auto;color:#8e97a4;background:transparent}
+    .workspace{position:relative;min-width:0;overflow:hidden;background:#fbfbfc}
+    .toolbar{position:absolute;z-index:4;top:0;right:0;left:0;display:flex;align-items:center;height:57px;padding:0 22px;background:#fbfbfce8;border-bottom:1px solid #e7e9ee;backdrop-filter:blur(18px)}
+    .title{display:flex;align-items:center;gap:8px;font-size:11px}.title span{color:#9aa2ae}.title b{font-weight:590}
+    .toolbar-actions{display:flex;gap:6px;margin-left:auto}.toolbar-actions button{display:grid;width:30px;height:30px;place-items:center;color:#788190;background:transparent;border:1px solid transparent;border-radius:8px;font-size:12px}.toolbar-actions button:hover{color:#354054;background:#f1f3f7;border-color:#e0e4ea}
+    .scroll{height:100%;overflow:auto;padding:91px 36px 194px;scrollbar-width:thin;scrollbar-color:#cbd1db transparent}.thread{width:min(760px,100%);margin:auto}
+    .date{margin-bottom:28px;color:#a4abb6;font-size:9px;text-align:center}
+    .user{width:fit-content;max-width:75%;padding:11px 14px;margin:0 0 27px auto;color:#fff;background:linear-gradient(160deg,#408aff,#246fef);border-radius:16px 16px 5px 16px;box-shadow:0 8px 24px #2878ff27;font-size:12px;line-height:1.6}
+    .assistant{display:grid;grid-template-columns:29px 1fr;gap:12px}.ai{display:grid;width:29px;height:29px;place-items:center;color:#286fdc;background:#eaf2ff;border:1px solid #d5e4fb;border-radius:9px;font-size:12px}
+    .content{color:#4c5768;font-size:12px;line-height:1.75}.content p{margin:3px 0 14px}.content strong{color:#263247}
+    .thinking{display:flex;align-items:center;gap:7px;width:fit-content;padding:5px 8px;margin:0 0 12px;color:#8c95a2;background:#f4f6f9;border:1px solid #e6e9ee;border-radius:7px;font-size:9px}.thinking i{width:5px;height:5px;background:#6b9bf0;border-radius:50%;animation:pulse 1.7s ease-in-out infinite}@keyframes pulse{50%{opacity:.25;transform:scale(.72)}}
+    .tool{margin:11px 0;overflow:hidden;background:#f7f8fa;border:1px solid #e1e4e9;border-radius:11px;box-shadow:0 3px 12px #2b3d5610;transition:.2s}.tool:hover{border-color:#ccd3de;box-shadow:0 7px 20px #2b3d5615}
+    .tool-head{display:grid;grid-template-columns:25px auto 1fr auto;align-items:center;gap:8px;width:100%;height:42px;padding:0 11px;background:transparent;text-align:left}.tool-icon{display:grid;width:25px;height:25px;place-items:center;color:#4e76a9;background:#e9eef5;border-radius:7px;font-size:10px}.tool-head b{color:#435066;font:600 10px ui-monospace,monospace}.tool-head span:nth-child(3){overflow:hidden;color:#9ca4b0;font:9px ui-monospace,monospace;text-overflow:ellipsis;white-space:nowrap}.tool .chev{color:#a4abb6;transition:.2s}.tool.open .chev{transform:rotate(180deg)}
+    .tool-body{display:none;padding:11px 13px;color:#7f8998;background:#fff;border-top:1px solid #e7e9ed;font:9px/1.65 ui-monospace,monospace;white-space:pre-wrap}.tool.open .tool-body{display:block;animation:reveal .25s ease}@keyframes reveal{from{opacity:0;transform:translateY(-4px)}}
+    .done{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;margin-top:12px;color:#427460;background:#f1faf6;border:1px solid #d6eee2;border-radius:10px;font-size:10px}.check{display:grid;width:17px;height:17px;flex:0 0 auto;place-items:center;color:#fff;background:#55a77d;border-radius:50%;font-size:9px}
+    .composer-wrap{position:absolute;z-index:5;right:max(26px,calc((100% - 720px)/2));bottom:20px;left:max(26px,calc((100% - 720px)/2))}
+    .composer{overflow:hidden;background:#fffffff0;border:1px solid #d9dee6;border-radius:17px;box-shadow:0 22px 60px #40516a25,0 2px 8px #40516a12;backdrop-filter:blur(22px);transition:.22s}.composer:focus-within{border-color:#85adf3;box-shadow:0 27px 75px #40516a2e,0 0 0 4px #2878ff12;transform:translateY(-2px)}
+    .context{display:flex;align-items:center;gap:9px;height:33px;padding:0 13px;color:#929aa6;background:#f7f8fac7;border-bottom:1px solid #e8eaf0;font-size:9px}.context b{color:#536075;font-weight:560}.context span:last-child{margin-left:auto}
+    textarea{display:block;width:100%;height:68px;padding:13px 14px 4px;resize:none;color:#303b4c;background:transparent;border:0;outline:0;font-size:12px;line-height:1.55}textarea::placeholder{color:#a4abb6}
+    .compose-bottom{display:flex;align-items:center;height:39px;padding:0 9px 8px 13px}.safe{display:flex;align-items:center;gap:6px;color:#8b94a1;font-size:9px}.safe i{width:6px;height:6px;background:#55b081;border-radius:50%}.shortcut{margin-left:auto;margin-right:10px;color:#aeb5bf;font-size:8px}.send{display:grid;width:30px;height:30px;place-items:center;color:#fff;background:linear-gradient(180deg,#3f89ff,#236fe8);border-radius:9px;box-shadow:0 5px 15px #2878ff34;transition:.2s}.send:hover{transform:translateY(-2px);filter:brightness(1.05)}.send.sent{animation:fly .45s ease}@keyframes fly{50%{transform:translate(6px,-6px) scale(.82);opacity:.35}}
+    .back{position:fixed;z-index:9;right:30px;top:28px;display:grid;width:31px;height:31px;place-items:center;color:#667284;background:#ffffffb8;border:1px solid #d9dfe7;border-radius:9px;box-shadow:0 5px 15px #23344a16;text-decoration:none;backdrop-filter:blur(12px)}
+    @media(max-width:760px){.window{grid-template-columns:68px 1fr}.sidebar{padding-inline:10px}.brand,.search,.section,.project span,.project small,.sessions,.account>:not(.avatar),.primary span{display:none}.primary,.project,.account{justify-content:center}.toolbar{padding-left:16px}.scroll{padding-inline:22px}}
+    @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <a class="back" href="index.html" title="返回方案列表">×</a>
+  <div class="window">
+    <aside class="sidebar">
+      <div class="top-row"><div class="traffic"><i></i><i></i><i></i></div><div class="brand">Pi Desktop</div></div>
+      <button class="primary">＋ <span>新建任务</span></button>
+      <div class="search">⌕ <span>搜索会话</span><kbd>⌘ K</kbd></div>
+      <div class="section">项目</div>
+      <button class="project active"><i class="folder"></i><span>pi-desktop</span><small>4</small></button>
+      <div class="sessions"><button class="active">重新设计应用界面</button><button>优化 Agent 启动速度</button><button>修复会话滚动位置</button></div>
+      <button class="project"><i class="folder"></i><span>policy-manager</span><small>2</small></button>
+      <button class="project"><i class="folder"></i><span>Study</span><small>7</small></button>
+      <div class="account"><span class="avatar">JW</span><span>本地工作区<small>Agent 已连接</small></span><button>⚙</button></div>
+    </aside>
+    <main class="workspace">
+      <header class="toolbar"><div class="title"><span>pi-desktop</span><span>/</span><b>重新设计应用界面</b></div><div class="toolbar-actions"><button title="会话树">⑂</button><button title="更多">•••</button></div></header>
+      <div class="scroll">
+        <article class="thread">
+          <div class="date">今天 14:32</div>
+          <div class="user">现在的 UI 不好看，帮我重新设计一下。要简约、大气、偏 macOS 风格。</div>
+          <section class="assistant"><div class="ai">✦</div><div class="content">
+            <div class="thinking"><i></i>正在分析现有界面结构</div>
+            <p>可以。这个版本以<strong>内容优先</strong>为核心：侧栏更像原生 macOS 应用，工具过程降低对比度，正文留出更稳定的阅读宽度。</p>
+            <div class="tool open"><button class="tool-head"><span class="tool-icon">⌘</span><b>inspect_workspace</b><span>src/renderer/src/App.tsx</span><span class="chev">⌄</span></button><div class="tool-body">Interface mapped successfully
+Components: 12
+Primary regions: 3
+Design constraints collected</div></div>
+            <div class="tool"><button class="tool-head"><span class="tool-icon">◇</span><b>render_prototype</b><span>03-porcelain-light.html</span><span class="chev">⌄</span></button><div class="tool-body">Porcelain tokens applied
+Responsive rules generated
+Interactions ready</div></div>
+            <p>蓝色只承担主要操作和用户消息，成功状态使用低饱和绿色，其余元素尽量保持中性。</p>
+            <div class="done"><span class="check">✓</span><span>原型已完成，并支持工具卡片展开、键盘发送和减少动态效果偏好。</span></div>
+          </div></section>
+        </article>
+      </div>
+      <div class="composer-wrap"><div class="composer">
+        <div class="context"><b>⌘ pi-desktop</b><span>已信任</span><span>gpt-5.6-sol · high</span></div>
+        <textarea id="prompt" placeholder="描述你想完成的事情…"></textarea>
+        <div class="compose-bottom"><span class="safe"><i></i>完全访问</span><span class="shortcut">↵ 发送 · ⇧↵ 换行</span><button class="send" id="send">↑</button></div>
+      </div></div>
+    </main>
+  </div>
+  <script>
+    document.querySelectorAll(".tool-head").forEach((button)=>button.addEventListener("click",()=>button.parentElement.classList.toggle("open")));
+    const send=document.querySelector("#send"),prompt=document.querySelector("#prompt");
+    send.addEventListener("click",()=>{if(!prompt.value.trim())return prompt.focus();send.classList.remove("sent");void send.offsetWidth;send.classList.add("sent");prompt.value=""});
+    prompt.addEventListener("keydown",(event)=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();send.click()}});
+  </script>
+</body>
+</html>

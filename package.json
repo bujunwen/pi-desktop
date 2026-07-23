@@ -1,0 +1,70 @@
+{
+  "name": "pi-desktop",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Keyboard-first desktop interface for the Pi coding agent",
+  "author": "Pi Desktop Contributors",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:rpc": "RUN_PI_INTEGRATION=1 vitest run tests/rpc-integration.test.ts",
+    "test:prompt": "RUN_PI_PROMPT_INTEGRATION=1 vitest run tests/rpc-integration.test.ts",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "pack:mac": "pnpm build && electron-builder --mac dir --arm64 --publish never",
+    "dist:mac": "pnpm build && electron-builder --mac dmg zip --arm64 --publish never"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.81.1",
+    "lucide-react": "^1.26.0",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "build": {
+    "appId": "works.earendil.pi-desktop",
+    "productName": "Pi Desktop",
+    "asar": true,
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/**/*.node",
+      "node_modules/**/photon_rs_bg.wasm"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "title": "Pi Desktop ${version}"
+    },
+    "artifactName": "Pi-Desktop-${version}-${arch}.${ext}"
+  }
+}

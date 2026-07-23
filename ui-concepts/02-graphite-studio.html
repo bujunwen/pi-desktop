@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Desktop · Graphite Studio</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0c0d0f; --panel:#121315; --panel2:#18191c; --line:#292b2f; --muted:#767a82; --lime:#b8f26a; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif; color:#eeeef0; background:var(--bg); }
+    * { box-sizing:border-box; }
+    body { width:100vw; height:100vh; margin:0; overflow:hidden; background:var(--bg); }
+    button,textarea { color:inherit; font:inherit; } button { border:0; cursor:pointer; }
+    .app { display:grid; grid-template-columns:72px 236px minmax(0,1fr); width:100%; height:100%; }
+    .rail { display:flex; flex-direction:column; align-items:center; padding:18px 0 14px; background:#0a0b0c; border-right:1px solid #202226; }
+    .traffic { display:flex; gap:5px; margin-bottom:25px; } .traffic i { width:8px;height:8px;border-radius:50%;background:#3a3c40; } .traffic i:first-child { background:#ff605c; }
+    .logo { display:grid; width:34px;height:34px;place-items:center;margin-bottom:20px;color:#101409;background:var(--lime);border-radius:10px;font:800 16px Georgia;box-shadow:0 0 32px #b8f26a22; }
+    .rail-nav { display:grid; gap:8px; }
+    .rail-nav button,.rail-bottom button { position:relative;display:grid;width:38px;height:38px;place-items:center;color:#676b73;background:transparent;border-radius:10px;transition:.2s; }
+    .rail-nav button:hover,.rail-nav button.active,.rail-bottom button:hover { color:#e8e9ea;background:#1a1c1f; }
+    .rail-nav button.active::before { content:"";position:absolute;left:-17px;width:2px;height:17px;background:var(--lime);border-radius:3px;box-shadow:0 0 9px var(--lime); }
+    .rail svg { width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6; }
+    .rail-bottom { display:grid;gap:7px;margin-top:auto; }
+    .tiny-avatar { display:grid!important;place-items:center!important;color:#0c1306!important;background:#9fd759!important;font-size:9px;font-weight:800; }
+    .sidebar { display:flex;min-width:0;flex-direction:column;padding:26px 14px 14px;background:#101113;border-right:1px solid #25272b; }
+    .sidebar header { display:flex;align-items:center;height:32px;padding:0 7px;margin-bottom:18px; }
+    .sidebar h1 { margin:0;font-size:13px;font-weight:650;letter-spacing:-.01em; } .sidebar header button { margin-left:auto;color:#777b82;background:transparent;font-size:17px; }
+    .quick { display:grid;grid-template-columns:1fr 34px;gap:6px;margin-bottom:24px; }
+    .quick button { height:33px;color:#c4c6ca;background:#191b1e;border:1px solid #24262a;border-radius:8px;font-size:11px;transition:.18s; }
+    .quick button:first-child { text-align:left;padding:0 10px; } .quick button:hover { background:#202226;border-color:#34373c; }
+    .label { padding:0 7px 8px;color:#555960;font:600 9px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase; }
+    .workspace-item { display:flex;align-items:center;gap:8px;width:100%;height:34px;padding:0 8px;color:#969aa1;background:transparent;border-radius:7px;font-size:11px;text-align:left;transition:.18s; }
+    .workspace-item:hover { color:#d5d7da;background:#17191c; }
+    .workspace-item.active { color:#f1f2f3;background:#1d1f22;box-shadow:inset 0 0 0 1px #2b2e32; }
+    .folder { width:12px;height:9px;border:1px solid currentColor;border-radius:2px;opacity:.7; } .workspace-item em { margin-left:auto;color:#52565d;font:normal 9px ui-monospace,monospace; }
+    .session-list { padding:4px 0 12px 23px; }
+    .session-list button { position:relative;width:100%;padding:7px 8px;overflow:hidden;color:#5f636a;background:transparent;border-radius:6px;font-size:10px;text-align:left;text-overflow:ellipsis;white-space:nowrap; }
+    .session-list button.active { color:#bfc2c7; } .session-list button.active::before { content:"";position:absolute;left:0;top:10px;width:3px;height:3px;background:var(--lime);border-radius:50%; }
+    .usage { padding:11px;margin-top:auto;background:#151719;border:1px solid #222428;border-radius:10px; }
+    .usage div { display:flex;justify-content:space-between;color:#777b82;font-size:9px; } .usage b { color:#bbbfc5;font-weight:500; }
+    .meter { height:3px;margin-top:9px;overflow:hidden;background:#292c30;border-radius:5px; } .meter i { display:block;width:36%;height:100%;background:var(--lime);border-radius:5px; }
+    .main { position:relative;min-width:0;overflow:hidden;background:linear-gradient(135deg,#111214,#0d0e10 65%); }
+    .top { position:absolute;z-index:3;top:0;right:0;left:0;display:flex;align-items:center;height:56px;padding:0 25px;background:#0e0f11e8;border-bottom:1px solid #202226;backdrop-filter:blur(16px); }
+    .title { display:flex;align-items:center;gap:9px;font-size:11px; } .title span { color:#5d6168; } .title b { font-weight:560; }
+    .top-actions { display:flex;align-items:center;gap:6px;margin-left:auto; }
+    .top-actions button { display:grid;width:30px;height:30px;place-items:center;color:#72767e;background:transparent;border-radius:7px;font-size:13px; }
+    .top-actions button:hover { color:#e6e7e9;background:#1b1d20; }
+    .run-state { display:flex;align-items:center;gap:6px;padding:5px 9px;color:#8c9198;background:#17191b;border:1px solid #27292d;border-radius:6px;font:9px ui-monospace,monospace; }
+    .run-state i { width:5px;height:5px;background:var(--lime);border-radius:50%; }
+    .conversation { height:100%;overflow:auto;padding:86px 40px 188px;scrollbar-width:thin;scrollbar-color:#303237 transparent; }
+    .thread { width:min(820px,100%);margin:auto; }
+    .meta-line { display:flex;align-items:center;gap:9px;margin-bottom:28px;color:#555961;font:9px ui-monospace,monospace;text-transform:uppercase; }
+    .meta-line::after { content:"";height:1px;flex:1;background:#202226; }
+    .user-row { display:grid;grid-template-columns:40px 1fr;gap:13px;margin-bottom:28px; }
+    .who { padding-top:3px;color:#575b62;font:600 9px ui-monospace,monospace;text-transform:uppercase; }
+    .user-copy { color:#e2e3e5;font-size:13px;line-height:1.6; }
+    .agent-row { display:grid;grid-template-columns:40px 1fr;gap:13px; }
+    .agent-row .who { color:var(--lime); }
+    .answer { color:#b9bcc2;font-size:12px;line-height:1.75; } .answer p { margin:0 0 14px; }
+    .steps { display:grid;gap:7px;margin:17px 0 19px; }
+    .step { overflow:hidden;background:#131517;border:1px solid #24262a;border-radius:9px;transition:.2s; }
+    .step:hover { border-color:#34373b; }
+    .step-head { display:grid;grid-template-columns:20px auto 1fr auto;align-items:center;gap:8px;width:100%;height:39px;padding:0 11px;color:#9a9ea5;background:transparent;text-align:left; }
+    .step-index { color:#5e6269;font:9px ui-monospace,monospace; } .step-head b { color:#c6c9ce;font:550 10px ui-monospace,monospace; }
+    .step-head span:nth-child(3) { overflow:hidden;color:#555960;font:9px ui-monospace,monospace;text-overflow:ellipsis;white-space:nowrap; }
+    .ok { color:var(--lime)!important; } .step-head .arrow { transition:transform .2s; } .step.open .arrow { transform:rotate(90deg); }
+    .step-body { display:none;padding:11px 13px;color:#6d727a;background:#0d0f10;border-top:1px solid #222428;font:10px/1.6 ui-monospace,monospace;white-space:pre-wrap; }
+    .step.open .step-body { display:block;animation:open .25s ease; } @keyframes open { from{opacity:0;transform:translateY(-4px)} }
+    .summary { display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:16px; }
+    .summary div { padding:12px;background:#131517;border:1px solid #222428;border-radius:9px; } .summary strong { display:block;color:#e1e3e6;font:600 15px ui-monospace,monospace; } .summary span { color:#5c6067;font-size:9px; }
+    .composer-wrap { position:absolute;z-index:5;right:max(28px,calc((100% - 760px)/2));bottom:22px;left:max(28px,calc((100% - 760px)/2)); }
+    .commandbar { display:flex;align-items:center;gap:6px;height:27px;padding:0 9px;margin-bottom:6px;color:#62666e;font:9px ui-monospace,monospace; }
+    .commandbar b { color:#999da4;font-weight:500; } .commandbar .mode { margin-left:auto;color:#858a91; }
+    .composer { position:relative;overflow:hidden;background:#191b1edb;border:1px solid #303338;border-radius:13px;box-shadow:0 22px 65px #000a;backdrop-filter:blur(24px);transition:.2s; }
+    .composer:focus-within { border-color:#53575e;box-shadow:0 25px 80px #000c,0 0 0 3px #ffffff07;transform:translateY(-2px); }
+    textarea { display:block;width:100%;height:74px;padding:14px 15px 4px;resize:none;color:#e3e5e7;background:transparent;border:0;outline:0;font:12px/1.55 ui-monospace,monospace; }
+    textarea::placeholder { color:#565a61; }
+    .bottom { display:flex;align-items:center;height:38px;padding:0 9px 8px 14px;color:#555a61;font:9px ui-monospace,monospace; }
+    .bottom button { display:grid;width:30px;height:30px;place-items:center;margin-left:auto;color:#11150c;background:var(--lime);border-radius:8px;font-weight:800;transition:.18s; }
+    .bottom button:hover { transform:translateY(-2px);box-shadow:0 8px 22px #b8f26a24; }
+    .bottom button.sent { animation:ping .45s ease; } @keyframes ping { 50%{transform:scale(.78);filter:brightness(1.4)} }
+    .back { position:fixed;z-index:8;right:17px;bottom:17px;color:#646970;text-decoration:none;font:10px ui-monospace,monospace; }
+    @media(max-width:880px){.app{grid-template-columns:64px 1fr}.sidebar{display:none}.conversation{padding-inline:24px}.summary{grid-template-columns:1fr}.who{display:none}.user-row,.agent-row{grid-template-columns:1fr}}
+    @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="traffic"><i></i><i></i><i></i></div><div class="logo">π</div>
+      <nav class="rail-nav">
+        <button class="active" title="会话"><svg viewBox="0 0 24 24"><path d="M5 5h14v11H9l-4 3z"/></svg></button>
+        <button title="项目"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg></button>
+        <button title="搜索"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+        <button title="分支"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 11c6 0 8-3 8-3"/></svg></button>
+      </nav>
+      <div class="rail-bottom"><button title="设置">⌘</button><button class="tiny-avatar">JW</button></div>
+    </aside>
+    <aside class="sidebar">
+      <header><h1>工作区</h1><button>···</button></header>
+      <div class="quick"><button>＋ 新建任务</button><button>⌕</button></div>
+      <div class="label">Projects</div>
+      <button class="workspace-item active"><i class="folder"></i><span>pi-desktop</span><em>04</em></button>
+      <div class="session-list"><button class="active">重新设计应用界面</button><button>Agent 状态同步异常</button><button>工具调用卡片重构</button></div>
+      <button class="workspace-item"><i class="folder"></i><span>policy-manager</span><em>02</em></button>
+      <button class="workspace-item"><i class="folder"></i><span>research</span><em>08</em></button>
+      <div class="usage"><div><span>Context</span><b>36%</b></div><div class="meter"><i></i></div></div>
+    </aside>
+    <main class="main">
+      <header class="top"><div class="title"><span>pi-desktop</span><span>›</span><b>重新设计应用界面</b></div><div class="top-actions"><span class="run-state"><i></i>READY</span><button>⌘K</button><button>•••</button></div></header>
+      <div class="conversation">
+        <article class="thread">
+          <div class="meta-line">SESSION 04 · TODAY 14:32</div>
+          <section class="user-row"><div class="who">YOU</div><div class="user-copy">现在的 UI 不好看，帮我重新设计一下。要简约、大气、偏 macOS 风格。</div></section>
+          <section class="agent-row"><div class="who">PI</div><div class="answer">
+            <p>先处理最影响观感的三个问题：侧栏层级、工具调用噪音，以及输入区对正文的遮挡。</p>
+            <div class="steps">
+              <div class="step open"><button class="step-head"><span class="step-index">01</span><b>inspect</b><span>src/renderer/src/App.tsx</span><span class="arrow">›</span></button><div class="step-body">12 components indexed
+3 primary interaction layers
+layout: sidebar / thread / composer</div></div>
+              <div class="step"><button class="step-head"><span class="step-index">02</span><b>prototype</b><span>ui-concepts/02-graphite-studio.html</span><span class="ok">DONE</span><span class="arrow">›</span></button><div class="step-body">Graphite design tokens applied
+Static prototype generated
+Interactions attached</div></div>
+              <div class="step"><button class="step-head"><span class="step-index">03</span><b>verify</b><span>layout · motion · responsive</span><span class="ok">PASS</span><span class="arrow">›</span></button><div class="step-body">Viewport coverage passed
+Reduced motion supported
+Keyboard submit verified</div></div>
+            </div>
+            <p>这个方向更接近专业开发工具：装饰更少，状态更清晰，绿色仅用于当前动作与成功反馈。</p>
+            <div class="summary"><div><strong>−28%</strong><span>视觉噪音</span></div><div><strong>760px</strong><span>阅读宽度</span></div><div><strong>3</strong><span>信息层级</span></div></div>
+          </div></section>
+        </article>
+      </div>
+      <div class="composer-wrap">
+        <div class="commandbar"><b>pi-desktop</b><span>/ trusted</span><span class="mode">gpt-5.6-sol · high</span></div>
+        <div class="composer"><textarea id="prompt" placeholder="Ask Pi anything…"></textarea><div class="bottom"><span>ENTER TO SEND · SHIFT+ENTER FOR NEW LINE</span><button id="send">↗</button></div></div>
+      </div>
+    </main>
+  </div>
+  <a class="back" href="index.html">[ ESC ] 返回方案</a>
+  <script>
+    document.querySelectorAll(".step-head").forEach((button)=>button.addEventListener("click",()=>button.parentElement.classList.toggle("open")));
+    const send=document.querySelector("#send"),prompt=document.querySelector("#prompt");
+    send.addEventListener("click",()=>{if(!prompt.value.trim())return prompt.focus();send.classList.remove("sent");void send.offsetWidth;send.classList.add("sent");prompt.value=""});
+    prompt.addEventListener("keydown",(e)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send.click()}});
+  </script>
+</body>
+</html>
