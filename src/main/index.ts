@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from "electron";
 import type {
   AppSettings,
   ExtensionUiResponse,
@@ -18,6 +18,7 @@ let projectStore: ProjectStore;
 let settingsStore: SettingsStore;
 let agentManager: AgentManager;
 const fileSearchService = new FileSearchService();
+const activeNotifications = new Set<Notification>();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -37,6 +38,9 @@ function createWindow(): void {
     },
   });
 
+  mainWindow.on("closed", () => {
+    mainWindow = undefined;
+  });
   mainWindow.once("ready-to-show", () => {
     app.focus({ steal: true });
     mainWindow?.maximize();
@@ -179,6 +183,28 @@ function registerIpc(): void {
       agentManager.getRuntime(runtimeId).respondExtensionUi(response);
     },
   );
+
+  ipcMain.handle(IPC.notificationTaskComplete, (_event, projectName: string) => {
+    const foreground = mainWindow?.isFocused() ?? false;
+    shell.beep();
+    if (!foreground) {
+      const notification = new Notification({
+        title: "Pi Desktop",
+        body: `${projectName} 的回复已完成`,
+        silent: true,
+      });
+      activeNotifications.add(notification);
+      const release = () => activeNotifications.delete(notification);
+      notification.on("click", () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      });
+      notification.on("close", release);
+      notification.on("failed", release);
+      notification.show();
+    }
+    return { foreground };
+  });
 
   ipcMain.handle(IPC.settingsGet, () => settingsStore.status());
   ipcMain.handle(IPC.settingsUpdate, async (_event, settings: AppSettings) => {

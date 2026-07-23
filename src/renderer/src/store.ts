@@ -25,6 +25,27 @@ export type ConversationItem =
     }
   | { id: string; kind: "notice"; text: string; tone: "normal" | "error" };
 
+export type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
+
+export function consecutiveToolGroups(items: ConversationItem[]): ToolItem[][] {
+  const groups: ToolItem[][] = [];
+  let current: ToolItem[] | undefined;
+
+  for (const item of items) {
+    if (item.kind !== "tool") {
+      current = undefined;
+      continue;
+    }
+    if (!current) {
+      current = [];
+      groups.push(current);
+    }
+    current.push(item);
+  }
+
+  return groups;
+}
+
 export interface ProjectConversation {
   items: ConversationItem[];
   commands: PiCommandInfo[];
@@ -57,6 +78,7 @@ export interface AppState {
   activeProjectId?: string;
   activeRuntimeIds: Record<string, string>;
   runtimeRunning: Record<string, boolean>;
+  runtimeCompleted: Record<string, boolean>;
   runtimeSessions: Record<string, string>;
   activeDialog?: AppDialog;
   conversations: Record<string, ProjectConversation>;
@@ -69,12 +91,14 @@ export interface AppState {
   settings?: AgentSourceStatus;
   setProjects(projects: ProjectRecord[]): void;
   setSessions(projectId: string, sessions: SessionSummary[]): void;
+  addPendingSession(projectId: string, sessionPath: string, firstMessage: string): void;
   setSettings(settings: AgentSourceStatus): void;
   addProject(project: ProjectRecord): void;
   removeProject(projectId: string): void;
   openDialog(dialog: AppDialog): void;
   closeDialog(): void;
   dismissExtensionDialog(id: string): void;
+  markSessionRead(sessionPath: string): void;
   beginActivation(projectId: string): void;
   applyActivation(activation: ProjectActivation): void;
   failActivation(projectId: string, message: string): void;
@@ -205,6 +229,7 @@ export const initialAppState = {
   sessions: {},
   activeRuntimeIds: {},
   runtimeRunning: {},
+  runtimeCompleted: {},
   runtimeSessions: {},
   conversations: {},
   loadingProject: false,
@@ -222,6 +247,26 @@ export const useAppStore = create<AppState>((set) => ({
 
   setSessions: (projectId, sessions) =>
     set((state) => ({ sessions: { ...state.sessions, [projectId]: sessions } })),
+
+  addPendingSession: (projectId, sessionPath, firstMessage) =>
+    set((state) => {
+      const sessions = state.sessions[projectId] ?? [];
+      if (sessions.some((session) => session.path === sessionPath)) return state;
+      const now = new Date().toISOString();
+      return {
+        sessions: {
+          ...state.sessions,
+          [projectId]: [{
+            path: sessionPath,
+            id: sessionPath,
+            createdAt: now,
+            modifiedAt: now,
+            messageCount: 1,
+            firstMessage,
+          }, ...sessions],
+        },
+      };
+    }),
 
   setSettings: (settings) => set({ settings }),
 
@@ -254,6 +299,14 @@ export const useAppStore = create<AppState>((set) => ({
 
   dismissExtensionDialog: (id) =>
     set((state) => ({ extensionDialogs: state.extensionDialogs.filter((item) => item.request.id !== id) })),
+
+  markSessionRead: (sessionPath) =>
+    set((state) => {
+      const runtimeId = Object.keys(state.runtimeSessions)
+        .find((id) => state.runtimeSessions[id] === sessionPath);
+      if (!runtimeId) return state;
+      return { runtimeCompleted: { ...state.runtimeCompleted, [runtimeId]: false } };
+    }),
 
   beginActivation: (projectId) =>
     set((state) => ({
@@ -384,9 +437,18 @@ export const useAppStore = create<AppState>((set) => ({
       let runtimeEditorRequests = state.runtimeEditorRequests;
       let extensionTitles = state.extensionTitles;
       const runtimeRunning = { ...state.runtimeRunning };
+      const runtimeCompleted = { ...state.runtimeCompleted };
 
-      if (event.type === "agent_start") runtimeRunning[runtimeId] = true;
+      if (event.type === "agent_start") {
+        runtimeRunning[runtimeId] = true;
+        runtimeCompleted[runtimeId] = false;
+      }
       if (event.type === "agent_settled" || event.type === "agent_process_exit") runtimeRunning[runtimeId] = false;
+      if (event.type === "agent_settled") {
+        const isVisible = state.activeProjectId === projectId
+          && state.activeRuntimeIds[projectId] === runtimeId;
+        runtimeCompleted[runtimeId] = !isVisible;
+      }
       if (event.type === "agent_process_exit") {
         extensionDialogs = state.extensionDialogs.filter((item) => item.runtimeId !== runtimeId);
       }
@@ -432,6 +494,7 @@ export const useAppStore = create<AppState>((set) => ({
 
       const base = {
         runtimeRunning,
+        runtimeCompleted,
         extensionDialogs,
         extensionStatuses,
         extensionWidgets,

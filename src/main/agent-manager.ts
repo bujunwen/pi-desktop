@@ -213,6 +213,8 @@ export class AgentManager {
   }
 
   #send(projectId: string, runtimeId: string, event: RpcRecord): void {
-    this.#getWindow()?.webContents.send(IPC.agentEvent, { projectId, runtimeId, event });
+    const window = this.#getWindow();
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return;
+    window.webContents.send(IPC.agentEvent, { projectId, runtimeId, event });
   }
 }

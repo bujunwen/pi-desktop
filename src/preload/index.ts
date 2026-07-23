@@ -47,6 +47,9 @@ const api: DesktopApi = {
       return () => ipcRenderer.removeListener(IPC.agentEvent, handler);
     },
   },
+  notifications: {
+    taskComplete: (projectName) => ipcRenderer.invoke(IPC.notificationTaskComplete, projectName),
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (settings: AppSettings) => ipcRenderer.invoke(IPC.settingsUpdate, settings),

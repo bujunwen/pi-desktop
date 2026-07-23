@@ -221,13 +221,19 @@ button {
   background: #513a35;
 }
 
-.live-dot {
+.completed-dot {
   width: 7px;
   height: 7px;
   margin-left: auto;
   border-radius: 50%;
-  background: #51c98b;
-  box-shadow: 0 0 0 3px #51c98b20;
+  background: #e2b84f;
+  box-shadow: 0 0 0 3px #e2b84f20;
+}
+
+.session-spinner {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #8b8c86;
 }
 
 .session-list {
@@ -555,6 +561,39 @@ button {
 .notice.error {
   color: #e49a91;
   background: #422b29;
+}
+
+.completion-toast {
+  position: absolute;
+  z-index: 20;
+  top: 42px;
+  right: 28px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  color: #e7e7e1;
+  background: #343530;
+  border: 1px solid #4a4b45;
+  border-radius: 10px;
+  box-shadow: 0 12px 34px #0006;
+  font-size: 12px;
+  animation: toast-in 180ms ease-out;
+}
+
+.completion-toast svg {
+  color: #e2b84f;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .composer-wrap {

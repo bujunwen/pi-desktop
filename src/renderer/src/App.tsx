@@ -36,9 +36,11 @@ import type {
 } from "../../shared/contracts";
 import { pinConversationToBottom, shouldFollowOutput } from "./scroll";
 import {
+  consecutiveToolGroups,
   type ConversationItem,
   type ExtensionDialogRequest,
   type ExtensionWidget,
+  type ToolItem,
   useAppStore,
 } from "./store";
 
@@ -109,7 +111,7 @@ async function beginNewTask(projectId: string): Promise<void> {
   const store = useAppStore.getState();
   store.beginActivation(projectId);
   try {
-    store.applyActivation(await window.piDesktop.projects.activate(projectId));
+    await window.piDesktop.projects.activate(projectId);
     await window.piDesktop.agent.runBuiltin(projectId, "new", "");
     store.applyActivation(await window.piDesktop.projects.activate(projectId));
     await refreshSessions(projectId);
@@ -133,10 +135,12 @@ function Sidebar() {
   const activeProjectId = useAppStore((state) => state.activeProjectId);
   const conversations = useAppStore((state) => state.conversations);
   const runtimeRunning = useAppStore((state) => state.runtimeRunning);
+  const runtimeCompleted = useAppStore((state) => state.runtimeCompleted);
   const runtimeSessions = useAppStore((state) => state.runtimeSessions);
   const setProjects = useAppStore((state) => state.setProjects);
   const addProjectToStore = useAppStore((state) => state.addProject);
   const removeProjectFromStore = useAppStore((state) => state.removeProject);
+  const markSessionRead = useAppStore((state) => state.markSessionRead);
   const openDialog = useAppStore((state) => state.openDialog);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => {
     const stored = localStorage.getItem(EXPANDED_PROJECTS_KEY);
@@ -200,12 +204,8 @@ function Sidebar() {
         {projects.map((project) => {
           const conversation = conversations[project.id];
           const projectSessions = sessions[project.id] ?? [];
-          const selected = project.id === activeProjectId;
+          const selected = project.id === activeProjectId && !conversation?.items.length;
           const expanded = expandedProjectIds.has(project.id);
-          const projectRunning = projectSessions.some((session) => {
-            const runtimeId = Object.keys(runtimeSessions).find((id) => runtimeSessions[id] === session.path);
-            return runtimeId ? runtimeRunning[runtimeId] : false;
-          });
           return (
             <div key={project.id} className="project-block">
               <div className={`project-row-wrap ${selected ? "selected" : ""}`}>
@@ -220,7 +220,6 @@ function Sidebar() {
                   <Folder size={15} />
                   <span className="project-name">{project.name}</span>
                   {project.pinned && <Star className="project-star" size={13} fill="currentColor" />}
-                  {projectRunning && <span className="live-dot" />}
                 </button>
                 <div className="project-menu-wrap">
                   <button
@@ -251,15 +250,24 @@ function Sidebar() {
                 <div className="session-list">
                   {projectSessions.slice(0, 8).map((session) => {
                     const runtimeId = Object.keys(runtimeSessions).find((id) => runtimeSessions[id] === session.path);
+                    const sessionRunning = Boolean(runtimeId && runtimeRunning[runtimeId])
+                      || Boolean(project.id === activeProjectId
+                        && conversation?.sessionFile === session.path
+                        && conversation.running);
                     return (
                       <button
                         key={session.path}
                         className={`session-row ${conversation?.sessionFile === session.path ? "active" : ""}`}
                         title={sessionTitle(session)}
-                        onClick={() => void switchSession(project.id, session.path)}
+                        onClick={() => {
+                          markSessionRead(session.path);
+                          void switchSession(project.id, session.path);
+                        }}
                       >
                         <span>{sessionTitle(session)}</span>
-                        {runtimeId && runtimeRunning[runtimeId] && <span className="live-dot" />}
+                        {sessionRunning
+                          ? <LoaderCircle className="session-spinner spin" size={13} />
+                          : runtimeId && runtimeCompleted[runtimeId] && <span className="completed-dot" />}
                       </button>
                     );
                   })}
@@ -277,8 +285,6 @@ function Sidebar() {
     </aside>
   );
 }
-
-type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
 
 function toolTarget(item: ToolItem): string {
   if (item.name === "bash" || item.name === "!" || item.name === "!!") {
@@ -374,22 +380,9 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
   const latestItem = items[items.length - 1];
   const latestPromptId = latestItem?.kind === "user" ? latestItem.id : undefined;
   const toolActivity = useMemo(() => {
-    let turnId = "initial";
-    const turns = new Map<string, ToolItem[]>();
-
-    for (const item of items) {
-      if (item.kind === "user") turnId = item.id;
-      if (item.kind !== "tool") continue;
-      const tools = turns.get(turnId) ?? [];
-      tools.push(item);
-      turns.set(turnId, tools);
-    }
-
-    const byFirstToolId = new Map<string, { turnId: string; tools: ToolItem[] }>();
-    for (const [groupTurnId, tools] of turns) {
-      byFirstToolId.set(tools[0].id, { turnId: groupTurnId, tools });
-    }
-    return { byFirstToolId, activeTurnId: turnId };
+    const byFirstToolId = new Map<string, ToolItem[]>();
+    for (const tools of consecutiveToolGroups(items)) byFirstToolId.set(tools[0].id, tools);
+    return byFirstToolId;
   }, [items]);
 
   const scheduleFollow = () => {
@@ -467,13 +460,13 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
             );
           }
           if (item.kind === "tool") {
-            const group = toolActivity.byFirstToolId.get(item.id);
+            const group = toolActivity.get(item.id);
             if (!group) return null;
             return (
               <ToolActivity
                 key={item.id}
-                items={group.tools}
-                running={running && group.turnId === toolActivity.activeTurnId}
+                items={group}
+                running={running && group[group.length - 1].id === latestItem?.id}
               />
             );
           }
@@ -550,6 +543,7 @@ function Composer() {
   const projects = useAppStore((state) => state.projects);
   const conversation = useAppStore((state) => state.activeProjectId ? state.conversations[state.activeProjectId] : undefined);
   const addUserMessage = useAppStore((state) => state.addUserMessage);
+  const addPendingSession = useAppStore((state) => state.addPendingSession);
   const addShellResult = useAppStore((state) => state.addShellResult);
   const openDialog = useAppStore((state) => state.openDialog);
   const applyActivation = useAppStore((state) => state.applyActivation);
@@ -711,6 +705,7 @@ function Composer() {
         return;
       }
 
+      addPendingSession(activeProjectId, conversation!.sessionFile!, message || "图片");
       addUserMessage(activeProjectId, message, images);
       await window.piDesktop.agent.prompt({
         projectId: activeProjectId,
@@ -1193,10 +1188,17 @@ export function App() {
   const activeRuntimeId = useAppStore((state) => state.activeProjectId ? state.activeRuntimeIds[state.activeProjectId] : undefined);
   const extensionTitle = useAppStore((state) => activeRuntimeId ? state.extensionTitles[activeRuntimeId] : undefined);
   const didStartInitialTask = useRef(false);
+  const [completionToast, setCompletionToast] = useState<{ id: string; text: string }>();
 
   useEffect(() => {
     document.title = extensionTitle || "Pi Desktop";
   }, [extensionTitle]);
+
+  useEffect(() => {
+    if (!completionToast) return;
+    const timer = window.setTimeout(() => setCompletionToast(undefined), 4000);
+    return () => window.clearTimeout(timer);
+  }, [completionToast]);
 
   useEffect(() => {
     void window.piDesktop.settings.get().then(setSettings);
@@ -1213,7 +1215,19 @@ export function App() {
       }));
       if (initialProject) await beginNewTask(initialProject.id);
     });
-    return window.piDesktop.agent.onEvent(handleAgentEvent);
+    return window.piDesktop.agent.onEvent((envelope) => {
+      handleAgentEvent(envelope);
+      if (envelope.event.type === "agent_settled") {
+        void refreshSessions(envelope.projectId);
+        const projectName = useAppStore.getState().projects
+          .find((project) => project.id === envelope.projectId)!.name;
+        void window.piDesktop.notifications.taskComplete(projectName).then(({ foreground }) => {
+          if (foreground) {
+            setCompletionToast({ id: crypto.randomUUID(), text: `${projectName} 的回复已完成` });
+          }
+        });
+      }
+    });
   }, [handleAgentEvent, setProjects, setSessions, setSettings]);
 
   return (
@@ -1221,6 +1235,12 @@ export function App() {
       <Sidebar />
       <main className="workspace">
         <div className="window-drag-region" />
+        {completionToast && (
+          <div className="completion-toast" key={completionToast.id}>
+            <Check size={15} />
+            <span>{completionToast.text}</span>
+          </div>
+        )}
         {loadingProject ? (
           <div className="loading-state"><LoaderCircle className="spin" />正在连接 Pi Agent…</div>
         ) : activeProjectId && conversation?.items.length ? (

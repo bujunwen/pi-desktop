@@ -65,8 +65,12 @@ describe("AgentManager", () => {
       return runtime;
     };
     const send = vi.fn();
+    let destroyed = false;
     const settings = { launchSpec: async () => launch } as unknown as SettingsStore;
-    const window = { webContents: { send } } as unknown as BrowserWindow;
+    const window = {
+      isDestroyed: () => destroyed,
+      webContents: { isDestroyed: () => destroyed, send },
+    } as unknown as BrowserWindow;
     const manager = new AgentManager(() => window, settings, factory);
 
     await manager.activate(project);
@@ -83,6 +87,10 @@ describe("AgentManager", () => {
       runtimeId: sessionA.runtimeId,
       event: { type: "agent_start" },
     });
+
+    destroyed = true;
+    callbacks[1]({ type: "agent_settled" });
+    expect(send).toHaveBeenCalledTimes(1);
 
     manager.dispose();
     expect(runtimes.every((runtime) => !runtime.isAlive)).toBe(true);

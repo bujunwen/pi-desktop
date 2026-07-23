@@ -110,6 +110,9 @@ export interface DesktopApi {
     respondExtensionUi(runtimeId: string, response: ExtensionUiResponse): Promise<void>;
     onEvent(listener: (envelope: AgentEventEnvelope) => void): () => void;
   };
+  notifications: {
+    taskComplete(projectName: string): Promise<{ foreground: boolean }>;
+  };
   settings: {
     get(): Promise<AgentSourceStatus>;
     update(settings: AppSettings): Promise<AgentSourceStatus>;
@@ -137,6 +140,7 @@ export const IPC = {
   agentShell: "agent:shell",
   agentExtensionUiResponse: "agent:extension-ui-response",
   agentEvent: "agent:event",
+  notificationTaskComplete: "notification:task-complete",
   settingsGet: "settings:get",
   settingsUpdate: "settings:update",
 } as const;

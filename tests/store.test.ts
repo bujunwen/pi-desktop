@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ProjectActivation, ProjectRecord } from "../src/shared/contracts";
-import { initialAppState, useAppStore } from "../src/renderer/src/store";
+import { consecutiveToolGroups, initialAppState, useAppStore } from "../src/renderer/src/store";
 
 const project: ProjectRecord = {
   id: "project-1",
@@ -48,6 +48,37 @@ beforeEach(() => {
 });
 
 describe("renderer store", () => {
+  it("keeps tool activity in its chronological position", () => {
+    const tool = (id: string) => ({
+      id,
+      kind: "tool" as const,
+      name: "read",
+      args: { path: `${id}.ts` },
+      output: "",
+      status: "success" as const,
+    });
+    const groups = consecutiveToolGroups([
+      tool("first"),
+      tool("second"),
+      { id: "reply", kind: "assistant", text: "checking", thinking: "", done: true },
+      tool("later"),
+    ]);
+
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([
+      ["first", "second"],
+      ["later"],
+    ]);
+  });
+
+  it("adds a new session to the sidebar before it exists on disk", () => {
+    useAppStore.getState().addPendingSession(project.id, "/tmp/new.jsonl", "hello");
+    useAppStore.getState().addPendingSession(project.id, "/tmp/new.jsonl", "hello");
+
+    expect(useAppStore.getState().sessions[project.id]).toMatchObject([
+      { path: "/tmp/new.jsonl", firstMessage: "hello", messageCount: 1 },
+    ]);
+  });
+
   it("shows an immediate running state while a prompt is being accepted", () => {
     useAppStore.getState().addUserMessage(project.id, "hello");
     expect(useAppStore.getState().conversations[project.id].running).toBe(true);
@@ -65,9 +96,16 @@ describe("renderer store", () => {
     store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-a", event: { type: "agent_start" } });
     expect(useAppStore.getState().runtimeRunning["runtime-a"]).toBe(true);
     expect(useAppStore.getState().conversations[project.id].running).toBe(false);
+    store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-a", event: { type: "agent_settled" } });
+    expect(useAppStore.getState().runtimeCompleted["runtime-a"]).toBe(true);
+    useAppStore.getState().markSessionRead("/tmp/a.jsonl");
+    expect(useAppStore.getState().runtimeCompleted["runtime-a"]).toBe(false);
 
     store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-b", event: { type: "agent_start" } });
     expect(useAppStore.getState().conversations[project.id].running).toBe(true);
+
+    store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-b", event: { type: "agent_settled" } });
+    expect(useAppStore.getState().runtimeCompleted["runtime-b"]).toBe(false);
   });
 
   it("queues extension dialogs with their owning runtime", () => {
