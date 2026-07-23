@@ -1,13 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { positionLatestPrompt, shouldFollowOutput } from "../src/renderer/src/scroll";
+import { describe, expect, it } from "vitest";
+import { pinConversationToBottom, shouldFollowOutput } from "../src/renderer/src/scroll";
 
-describe("positionLatestPrompt", () => {
-  it("does not leak Chromium's scroll promise into a React effect cleanup", () => {
-    const scrollIntoView = vi.fn(() => Promise.resolve());
-    const target = { scrollIntoView } as unknown as Pick<HTMLElement, "scrollIntoView">;
-
-    expect(positionLatestPrompt(target)).toBeUndefined();
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "end" });
+describe("pinConversationToBottom", () => {
+  it("only writes the scroll position when it is not already pinned", () => {
+    const target = { scrollHeight: 1000, scrollTop: 500, clientHeight: 400 };
+    expect(pinConversationToBottom(target)).toBe(true);
+    expect(target.scrollTop).toBe(600);
+    expect(pinConversationToBottom(target)).toBe(false);
   });
 });
 

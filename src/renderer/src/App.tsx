@@ -34,7 +34,7 @@ import type {
   SessionSummary,
   ThinkingLevel,
 } from "../../shared/contracts";
-import { positionLatestPrompt, shouldFollowOutput } from "./scroll";
+import { pinConversationToBottom, shouldFollowOutput } from "./scroll";
 import {
   type ConversationItem,
   type ExtensionDialogRequest,
@@ -366,7 +366,7 @@ function ImageLightbox({ image, onClose }: { image: ImageContent; onClose(): voi
 
 function Conversation({ items, running }: { items: ConversationItem[]; running: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
   const followFrameRef = useRef<number | undefined>(undefined);
   const followOutputRef = useRef(true);
   const previousScrollTopRef = useRef(0);
@@ -392,17 +392,36 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
     return { byFirstToolId, activeTurnId: turnId };
   }, [items]);
 
+  const scheduleFollow = () => {
+    if (!followOutputRef.current || followFrameRef.current !== undefined) return;
+    followFrameRef.current = requestAnimationFrame(() => {
+      followFrameRef.current = undefined;
+      const target = scrollRef.current;
+      if (!followOutputRef.current || !target) return;
+      pinConversationToBottom(target);
+      previousScrollTopRef.current = target.scrollTop;
+    });
+  };
+
   useEffect(() => {
-    if (latestPromptId) followOutputRef.current = true;
+    if (!latestPromptId) return;
+    followOutputRef.current = true;
+    scheduleFollow();
   }, [latestPromptId]);
 
   useEffect(() => {
-    if (!followOutputRef.current) return;
-    followFrameRef.current = requestAnimationFrame(() => positionLatestPrompt(conversationEndRef.current));
+    const scroll = scrollRef.current;
+    const conversation = conversationRef.current;
+    if (!scroll || !conversation) return;
+
+    const observer = new ResizeObserver(scheduleFollow);
+    observer.observe(scroll);
+    observer.observe(conversation);
     return () => {
+      observer.disconnect();
       if (followFrameRef.current !== undefined) cancelAnimationFrame(followFrameRef.current);
     };
-  }, [items, running]);
+  }, []);
 
   return (
     <div
@@ -422,7 +441,7 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
         }
       }}
     >
-      <div className="conversation">
+      <div className="conversation" ref={conversationRef}>
         {items.map((item) => {
           if (item.kind === "user") return (
             <div key={item.id} className="user-message">
@@ -466,7 +485,7 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
             <span>正在思考…</span>
           </div>
         )}
-        <div className="conversation-end" ref={conversationEndRef} />
+        <div className="conversation-end" />
       </div>
       {previewImage && <ImageLightbox image={previewImage} onClose={() => setPreviewImage(undefined)} />}
     </div>

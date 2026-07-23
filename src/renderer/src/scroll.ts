@@ -1,8 +1,11 @@
-type ScrollTarget = Pick<HTMLElement, "scrollIntoView">;
 type ScrollPosition = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
 
-export function positionLatestPrompt(target: ScrollTarget | null): void {
-  target?.scrollIntoView({ block: "end" });
+export function pinConversationToBottom(target: ScrollPosition | null): boolean {
+  if (!target) return false;
+  const bottom = Math.max(0, target.scrollHeight - target.clientHeight);
+  if (Math.abs(target.scrollTop - bottom) < 1) return false;
+  target.scrollTop = bottom;
+  return true;
 }
 
 export function shouldFollowOutput(
