@@ -50,6 +50,7 @@ export class AgentManager {
   readonly #runtimes = new Map<string, AgentRuntime>();
   readonly #runtimeProjects = new Map<string, string>();
   readonly #activeByProject = new Map<string, string>();
+  readonly #latestActivationRequests = new Map<string, number>();
   readonly #runtimeBySession = new Map<string, string>();
   readonly #sessionByRuntime = new Map<string, string>();
   readonly #pendingDeltas = new Map<string, PendingDelta>();
@@ -80,17 +81,29 @@ export class AgentManager {
     return runtime;
   }
 
-  async activate(project: ProjectRecord): Promise<ProjectActivation> {
+  requestActivation(projectId: string, requestId: number): void {
+    const latest = this.#latestActivationRequests.get(projectId) ?? 0;
+    if (requestId > latest) this.#latestActivationRequests.set(projectId, requestId);
+  }
+
+  async activate(project: ProjectRecord, requestId: number): Promise<ProjectActivation> {
     const activeId = this.#activeByProject.get(project.id);
     const active = activeId ? this.#runtimes.get(activeId) : undefined;
     if (active?.isAlive) return this.#activation(activeId!, await active.snapshot());
 
     const { runtimeId, runtime } = await this.#create(project);
-    this.#activeByProject.set(project.id, runtimeId);
-    return this.#activation(runtimeId, await runtime.activate());
+    const activation = this.#activation(runtimeId, await runtime.activate());
+    if (this.#isCurrentActivation(project.id, requestId)) {
+      this.#activeByProject.set(project.id, runtimeId);
+    }
+    return activation;
   }
 
-  async openSession(project: ProjectRecord, sessionPath: string): Promise<ProjectActivation> {
+  async openSession(
+    project: ProjectRecord,
+    sessionPath: string,
+    requestId: number,
+  ): Promise<ProjectActivation> {
     const sessionKey = this.#sessionKey(project.id, sessionPath);
     let runtimeId = this.#runtimeBySession.get(sessionKey);
     let runtime = runtimeId ? this.#runtimes.get(runtimeId) : undefined;
@@ -101,8 +114,11 @@ export class AgentManager {
       runtime = created.runtime;
     }
 
-    this.#activeByProject.set(project.id, runtimeId!);
-    return this.#activation(runtimeId!, await runtime.activate());
+    const activation = this.#activation(runtimeId!, await runtime.activate());
+    if (this.#isCurrentActivation(project.id, requestId)) {
+      this.#activeByProject.set(project.id, runtimeId!);
+    }
+    return activation;
   }
 
   removeProject(projectId: string): void {
@@ -111,6 +127,16 @@ export class AgentManager {
       this.#disposeRuntime(runtimeId);
     }
     this.#activeByProject.delete(projectId);
+    this.#latestActivationRequests.delete(projectId);
+  }
+
+  removeSession(projectId: string, sessionPath: string): void {
+    const runtimeId = this.#runtimeBySession.get(this.#sessionKey(projectId, sessionPath));
+    if (!runtimeId) return;
+    this.#disposeRuntime(runtimeId);
+    if (this.#activeByProject.get(projectId) === runtimeId) {
+      this.#activeByProject.delete(projectId);
+    }
   }
 
   dispose(): void {
@@ -120,6 +146,7 @@ export class AgentManager {
     this.#runtimes.clear();
     this.#runtimeProjects.clear();
     this.#activeByProject.clear();
+    this.#latestActivationRequests.clear();
     this.#runtimeBySession.clear();
     this.#sessionByRuntime.clear();
   }
@@ -155,6 +182,10 @@ export class AgentManager {
 
   #sessionKey(projectId: string, sessionPath: string): string {
     return `${projectId}\u0000${sessionPath}`;
+  }
+
+  #isCurrentActivation(projectId: string, requestId: number): boolean {
+    return this.#latestActivationRequests.get(projectId) === requestId;
   }
 
   #disposeRuntime(runtimeId: string): void {

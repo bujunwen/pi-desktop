@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -20,6 +21,14 @@ export async function listProjectSessions(cwd: string): Promise<SessionSummary[]
     messageCount: session.messageCount,
     firstMessage: session.firstMessage,
   }));
+}
+
+export async function deleteProjectSession(cwd: string, sessionPath: string): Promise<void> {
+  const sessions = await SessionManager.list(cwd);
+  if (!sessions.some((session) => session.path === sessionPath)) {
+    throw new Error("Session does not belong to this project");
+  }
+  await rm(sessionPath);
 }
 
 function resolveRipgrep(): string {

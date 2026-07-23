@@ -59,6 +59,12 @@ export interface AgentEventEnvelope {
   event: RpcRecord;
 }
 
+export interface TaskCompleteNotification {
+  projectId: string;
+  projectName: string;
+  sessionPath: string;
+}
+
 export interface ProjectActivation {
   project: ProjectRecord;
   runtimeId: string;
@@ -92,9 +98,10 @@ export interface DesktopApi {
     remove(projectId: string): Promise<void>;
     setPinned(projectId: string, pinned: boolean): Promise<ProjectRecord[]>;
     reveal(projectId: string): Promise<void>;
-    activate(projectId: string): Promise<ProjectActivation>;
+    activate(projectId: string, requestId: number): Promise<ProjectActivation>;
     listSessions(projectId: string): Promise<SessionSummary[]>;
-    switchSession(projectId: string, sessionPath: string): Promise<ProjectActivation>;
+    switchSession(projectId: string, sessionPath: string, requestId: number): Promise<ProjectActivation>;
+    deleteSession(projectId: string, sessionPath: string): Promise<void>;
     searchFiles(projectId: string, query: string): Promise<FileMatch[]>;
   };
   agent: {
@@ -111,7 +118,12 @@ export interface DesktopApi {
     onEvent(listener: (envelope: AgentEventEnvelope) => void): () => void;
   };
   notifications: {
-    taskComplete(projectName: string): Promise<{ foreground: boolean }>;
+    taskComplete(notification: TaskCompleteNotification): Promise<void>;
+    onOpenSession(listener: (notification: TaskCompleteNotification) => void): () => void;
+  };
+  sessionViews: {
+    get(sessionPath: string): Promise<unknown | undefined>;
+    set(sessionPath: string, value: unknown): Promise<void>;
   };
   settings: {
     get(): Promise<AgentSourceStatus>;
@@ -128,6 +140,7 @@ export const IPC = {
   projectsActivate: "projects:activate",
   projectsSessions: "projects:sessions",
   projectsSwitchSession: "projects:switch-session",
+  projectsDeleteSession: "projects:delete-session",
   projectsSearchFiles: "projects:search-files",
   agentPrompt: "agent:prompt",
   agentAbort: "agent:abort",
@@ -141,6 +154,9 @@ export const IPC = {
   agentExtensionUiResponse: "agent:extension-ui-response",
   agentEvent: "agent:event",
   notificationTaskComplete: "notification:task-complete",
+  notificationOpenSession: "notification:open-session",
+  sessionViewGet: "session-view:get",
+  sessionViewSet: "session-view:set",
   settingsGet: "settings:get",
   settingsUpdate: "settings:update",
 } as const;

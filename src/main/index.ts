@@ -5,17 +5,25 @@ import type {
   ExtensionUiResponse,
   PromptInput,
   ShellResult,
+  TaskCompleteNotification,
   ThinkingLevel,
 } from "../shared/contracts";
 import { IPC } from "../shared/contracts";
 import { AgentManager } from "./agent-manager";
-import { FileSearchService, listProjectSessions, runLocalShell } from "./project-services";
+import {
+  deleteProjectSession,
+  FileSearchService,
+  listProjectSessions,
+  runLocalShell,
+} from "./project-services";
 import { ProjectStore } from "./project-store";
+import { SessionViewCache } from "./session-view-cache";
 import { SettingsStore } from "./settings-store";
 
 let mainWindow: BrowserWindow | undefined;
 let projectStore: ProjectStore;
 let settingsStore: SettingsStore;
+let sessionViewCache: SessionViewCache;
 let agentManager: AgentManager;
 const fileSearchService = new FileSearchService();
 const activeNotifications = new Set<Notification>();
@@ -98,9 +106,10 @@ function registerIpc(): void {
     shell.showItemInFolder(project.path);
   });
 
-  ipcMain.handle(IPC.projectsActivate, async (_event, projectId: string) => {
+  ipcMain.handle(IPC.projectsActivate, async (_event, projectId: string, requestId: number) => {
+    agentManager.requestActivation(projectId, requestId);
     const project = await projectStore.touch(projectId);
-    return agentManager.activate(project);
+    return agentManager.activate(project, requestId);
   });
 
   ipcMain.handle(IPC.projectsSessions, async (_event, projectId: string) => {
@@ -110,9 +119,20 @@ function registerIpc(): void {
 
   ipcMain.handle(
     IPC.projectsSwitchSession,
-    async (_event, projectId: string, sessionPath: string) => {
+    async (_event, projectId: string, sessionPath: string, requestId: number) => {
+      agentManager.requestActivation(projectId, requestId);
       const project = await projectStore.touch(projectId);
-      return agentManager.openSession(project, sessionPath);
+      return agentManager.openSession(project, sessionPath, requestId);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.projectsDeleteSession,
+    async (_event, projectId: string, sessionPath: string) => {
+      const project = await projectStore.get(projectId);
+      agentManager.removeSession(projectId, sessionPath);
+      await deleteProjectSession(project.path, sessionPath);
+      await sessionViewCache.delete(sessionPath);
     },
   );
 
@@ -184,26 +204,29 @@ function registerIpc(): void {
     },
   );
 
-  ipcMain.handle(IPC.notificationTaskComplete, (_event, projectName: string) => {
-    const foreground = mainWindow?.isFocused() ?? false;
+  ipcMain.handle(IPC.sessionViewGet, (_event, sessionPath: string) =>
+    sessionViewCache.get(sessionPath));
+
+  ipcMain.handle(IPC.sessionViewSet, (_event, sessionPath: string, value: unknown) =>
+    sessionViewCache.set(sessionPath, value));
+
+  ipcMain.handle(IPC.notificationTaskComplete, (_event, payload: TaskCompleteNotification) => {
+    const notification = new Notification({
+      title: "Pi Desktop",
+      body: `${payload.projectName} 的回复已完成`,
+      silent: true,
+    });
+    activeNotifications.add(notification);
+    const release = () => activeNotifications.delete(notification);
+    notification.on("click", () => {
+      mainWindow?.show();
+      mainWindow?.focus();
+      mainWindow?.webContents.send(IPC.notificationOpenSession, payload);
+    });
+    notification.on("close", release);
+    notification.on("failed", release);
+    notification.show();
     shell.beep();
-    if (!foreground) {
-      const notification = new Notification({
-        title: "Pi Desktop",
-        body: `${projectName} 的回复已完成`,
-        silent: true,
-      });
-      activeNotifications.add(notification);
-      const release = () => activeNotifications.delete(notification);
-      notification.on("click", () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      });
-      notification.on("close", release);
-      notification.on("failed", release);
-      notification.show();
-    }
-    return { foreground };
   });
 
   ipcMain.handle(IPC.settingsGet, () => settingsStore.status());
@@ -218,6 +241,7 @@ app.whenReady().then(() => {
   const userDataPath = app.getPath("userData");
   projectStore = new ProjectStore(userDataPath);
   settingsStore = new SettingsStore(userDataPath);
+  sessionViewCache = new SessionViewCache(userDataPath);
   agentManager = new AgentManager(() => mainWindow, settingsStore);
   registerIpc();
   createWindow();

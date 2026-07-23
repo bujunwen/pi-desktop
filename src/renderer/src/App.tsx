@@ -34,12 +34,14 @@ import type {
   SessionSummary,
   ThinkingLevel,
 } from "../../shared/contracts";
+import { ActivationRequests } from "./activation-requests";
 import { pinConversationToBottom, shouldFollowOutput } from "./scroll";
 import {
   consecutiveToolGroups,
   type ConversationItem,
   type ExtensionDialogRequest,
   type ExtensionWidget,
+  type ProjectConversation,
   type ToolItem,
   useAppStore,
 } from "./store";
@@ -47,6 +49,8 @@ import {
 const EMPTY_WIDGETS: Record<string, ExtensionWidget> = {};
 const EMPTY_SESSIONS: SessionSummary[] = [];
 const EXPANDED_PROJECTS_KEY = "pi-desktop:expanded-projects";
+const SESSION_LISTS_CACHE_KEY = "pi-desktop:session-lists";
+const activationRequests = new ActivationRequests();
 
 function MarkdownContent({ children }: { children: string }) {
   return (
@@ -85,38 +89,69 @@ async function refreshSessions(projectId: string): Promise<void> {
   useAppStore.getState().setSessions(projectId, sessions);
 }
 
+async function reapplyProjectActivation(projectId: string, requestId: number): Promise<boolean> {
+  const activation = await window.piDesktop.projects.activate(projectId, requestId);
+  if (!activationRequests.isCurrent(requestId)) return false;
+  useAppStore.getState().applyActivation(activation);
+  return true;
+}
+
 async function activateProject(projectId: string): Promise<void> {
+  const requestId = activationRequests.begin();
   const store = useAppStore.getState();
   store.beginActivation(projectId);
   try {
-    store.applyActivation(await window.piDesktop.projects.activate(projectId));
+    const activation = await window.piDesktop.projects.activate(projectId, requestId);
+    if (!activationRequests.isCurrent(requestId)) return;
+    store.applyActivation(activation);
     await refreshSessions(projectId);
   } catch (error) {
-    store.failActivation(projectId, (error as Error).message);
+    if (activationRequests.isCurrent(requestId)) {
+      store.failActivation(projectId, (error as Error).message);
+    }
   }
 }
 
 async function switchSession(projectId: string, sessionPath: string): Promise<void> {
+  const requestId = activationRequests.begin();
   const store = useAppStore.getState();
   store.beginActivation(projectId);
   try {
-    store.applyActivation(await window.piDesktop.projects.switchSession(projectId, sessionPath));
+    const activationPromise = window.piDesktop.projects.switchSession(projectId, sessionPath, requestId);
+    void activationPromise.catch(() => undefined);
+    const cached = await window.piDesktop.sessionViews.get(sessionPath);
+    if (!activationRequests.isCurrent(requestId)) return;
+    if (cached) store.showCachedSession(projectId, sessionPath, cached as ProjectConversation);
+    const activation = await activationPromise;
+    if (!activationRequests.isCurrent(requestId)) return;
+    store.applyActivation(activation);
+    const conversation = useAppStore.getState().conversations[projectId];
+    void window.piDesktop.sessionViews.set(sessionPath, conversation);
     await refreshSessions(projectId);
   } catch (error) {
-    store.failActivation(projectId, (error as Error).message);
+    if (activationRequests.isCurrent(requestId)) {
+      store.failActivation(projectId, (error as Error).message);
+    }
   }
 }
 
 async function beginNewTask(projectId: string): Promise<void> {
+  const requestId = activationRequests.begin();
   const store = useAppStore.getState();
   store.beginActivation(projectId);
   try {
-    await window.piDesktop.projects.activate(projectId);
+    await window.piDesktop.projects.activate(projectId, requestId);
+    if (!activationRequests.isCurrent(requestId)) return;
     await window.piDesktop.agent.runBuiltin(projectId, "new", "");
-    store.applyActivation(await window.piDesktop.projects.activate(projectId));
+    if (!activationRequests.isCurrent(requestId)) return;
+    const activation = await window.piDesktop.projects.activate(projectId, requestId);
+    if (!activationRequests.isCurrent(requestId)) return;
+    store.applyActivation(activation);
     await refreshSessions(projectId);
   } catch (error) {
-    store.failActivation(projectId, (error as Error).message);
+    if (activationRequests.isCurrent(requestId)) {
+      store.failActivation(projectId, (error as Error).message);
+    }
   }
 }
 
@@ -129,6 +164,11 @@ function sessionTitle(session: SessionSummary): string {
   return session.name || session.firstMessage || "新会话";
 }
 
+function deletionSessionTitle(session: SessionSummary): string {
+  const characters = Array.from(sessionTitle(session).replace(/\s+/g, " ").trim());
+  return characters.length > 10 ? `${characters.slice(0, 10).join("")}…` : characters.join("");
+}
+
 function Sidebar() {
   const projects = useAppStore((state) => state.projects);
   const sessions = useAppStore((state) => state.sessions);
@@ -137,9 +177,11 @@ function Sidebar() {
   const runtimeRunning = useAppStore((state) => state.runtimeRunning);
   const runtimeCompleted = useAppStore((state) => state.runtimeCompleted);
   const runtimeSessions = useAppStore((state) => state.runtimeSessions);
+  const loadingProject = useAppStore((state) => state.loadingProject);
   const setProjects = useAppStore((state) => state.setProjects);
   const addProjectToStore = useAppStore((state) => state.addProject);
   const removeProjectFromStore = useAppStore((state) => state.removeProject);
+  const removeSessionFromStore = useAppStore((state) => state.removeSession);
   const markSessionRead = useAppStore((state) => state.markSessionRead);
   const openDialog = useAppStore((state) => state.openDialog);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => {
@@ -151,6 +193,15 @@ function Sidebar() {
   useEffect(() => {
     localStorage.setItem(EXPANDED_PROJECTS_KEY, JSON.stringify([...expandedProjectIds]));
   }, [expandedProjectIds]);
+
+  const activeConversation = activeProjectId ? conversations[activeProjectId] : undefined;
+  useEffect(() => {
+    if (!activeProjectId || !activeConversation?.sessionFile || activeConversation.items.length === 0) return;
+    setExpandedProjectIds((current) => {
+      if (current.has(activeProjectId)) return current;
+      return new Set(current).add(activeProjectId);
+    });
+  }, [activeConversation?.items.length, activeConversation?.sessionFile, activeProjectId]);
 
   useEffect(() => {
     const closeMenu = (event: MouseEvent) => {
@@ -187,6 +238,12 @@ function Sidebar() {
     setProjects(await window.piDesktop.projects.setPinned(projectId, pinned));
   };
 
+  const deleteSession = async (projectId: string, session: SessionSummary) => {
+    if (!window.confirm(`永久删除会话“${deletionSessionTitle(session)}”？\n此操作不可恢复。`)) return;
+    await window.piDesktop.projects.deleteSession(projectId, session.path);
+    removeSessionFromStore(projectId, session.path);
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-drag-region" />
@@ -204,7 +261,9 @@ function Sidebar() {
         {projects.map((project) => {
           const conversation = conversations[project.id];
           const projectSessions = sessions[project.id] ?? [];
-          const selected = project.id === activeProjectId && !conversation?.items.length;
+          const selected = project.id === activeProjectId
+            && !loadingProject
+            && !conversation?.items.length;
           const expanded = expandedProjectIds.has(project.id);
           return (
             <div key={project.id} className="project-block">
@@ -255,20 +314,29 @@ function Sidebar() {
                         && conversation?.sessionFile === session.path
                         && conversation.running);
                     return (
-                      <button
-                        key={session.path}
-                        className={`session-row ${conversation?.sessionFile === session.path ? "active" : ""}`}
-                        title={sessionTitle(session)}
-                        onClick={() => {
-                          markSessionRead(session.path);
-                          void switchSession(project.id, session.path);
-                        }}
-                      >
-                        <span>{sessionTitle(session)}</span>
-                        {sessionRunning
-                          ? <LoaderCircle className="session-spinner spin" size={13} />
-                          : runtimeId && runtimeCompleted[runtimeId] && <span className="completed-dot" />}
-                      </button>
+                      <div className="session-row-wrap" key={session.path}>
+                        <button
+                          className={`session-row ${conversation?.sessionFile === session.path ? "active" : ""}`}
+                          title={sessionTitle(session)}
+                          onClick={() => {
+                            markSessionRead(session.path);
+                            void switchSession(project.id, session.path);
+                          }}
+                        >
+                          <span>{sessionTitle(session)}</span>
+                          {sessionRunning
+                            ? <LoaderCircle className="session-spinner spin" size={13} />
+                            : runtimeId && runtimeCompleted[runtimeId] && <span className="completed-dot" />}
+                        </button>
+                        <button
+                          className="session-delete"
+                          title="删除会话"
+                          disabled={loadingProject && project.id === activeProjectId}
+                          onClick={() => void deleteSession(project.id, session)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -396,6 +464,12 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
     });
   };
 
+  const cancelScheduledFollow = () => {
+    if (followFrameRef.current === undefined) return;
+    cancelAnimationFrame(followFrameRef.current);
+    followFrameRef.current = undefined;
+  };
+
   useEffect(() => {
     if (!latestPromptId) return;
     followOutputRef.current = true;
@@ -412,7 +486,7 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
     observer.observe(conversation);
     return () => {
       observer.disconnect();
-      if (followFrameRef.current !== undefined) cancelAnimationFrame(followFrameRef.current);
+      cancelScheduledFollow();
     };
   }, []);
 
@@ -429,9 +503,7 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
           target,
         );
         previousScrollTopRef.current = target.scrollTop;
-        if (!followOutputRef.current && followFrameRef.current !== undefined) {
-          cancelAnimationFrame(followFrameRef.current);
-        }
+        if (!followOutputRef.current) cancelScheduledFollow();
       }}
     >
       <div className="conversation" ref={conversationRef}>
@@ -540,13 +612,13 @@ function FileMenu({
 
 function Composer() {
   const activeProjectId = useAppStore((state) => state.activeProjectId);
+  const loadingProject = useAppStore((state) => state.loadingProject);
   const projects = useAppStore((state) => state.projects);
   const conversation = useAppStore((state) => state.activeProjectId ? state.conversations[state.activeProjectId] : undefined);
   const addUserMessage = useAppStore((state) => state.addUserMessage);
   const addPendingSession = useAppStore((state) => state.addPendingSession);
   const addShellResult = useAppStore((state) => state.addShellResult);
   const openDialog = useAppStore((state) => state.openDialog);
-  const applyActivation = useAppStore((state) => state.applyActivation);
   const activeRuntimeId = useAppStore((state) => state.activeProjectId ? state.activeRuntimeIds[state.activeProjectId] : undefined);
   const extensionWidgets = useAppStore((state) => activeRuntimeId ? state.extensionWidgets[activeRuntimeId] ?? EMPTY_WIDGETS : EMPTY_WIDGETS);
   const editorRequest = useAppStore((state) => activeRuntimeId ? state.runtimeEditorRequests[activeRuntimeId] : undefined);
@@ -647,8 +719,10 @@ function Composer() {
 
   const chooseModel = async (model: Record<string, unknown>) => {
     if (!activeProjectId) return;
+    const requestId = activationRequests.current();
     await window.piDesktop.agent.setModel(activeProjectId, String(model.provider), String(model.id));
-    applyActivation(await window.piDesktop.projects.activate(activeProjectId));
+    if (!activationRequests.isCurrent(requestId)) return;
+    await reapplyProjectActivation(activeProjectId, requestId);
     setOpenPicker(undefined);
   };
 
@@ -661,14 +735,16 @@ function Composer() {
 
   const chooseThinkingLevel = async (level: ThinkingLevel) => {
     if (!activeProjectId) return;
+    const requestId = activationRequests.current();
     await window.piDesktop.agent.setThinkingLevel(activeProjectId, level);
-    applyActivation(await window.piDesktop.projects.activate(activeProjectId));
+    if (!activationRequests.isCurrent(requestId)) return;
+    await reapplyProjectActivation(activeProjectId, requestId);
   };
 
   const send = async (followUp = false, suggestedText?: string) => {
     const message = (suggestedText ?? text).trim();
     const images = attachments;
-    if (!activeProjectId || (!message && images.length === 0) || sending) return;
+    if (!activeProjectId || loadingProject || (!message && images.length === 0) || sending) return;
 
     setText("");
     setAttachments([]);
@@ -699,8 +775,10 @@ function Composer() {
       }
 
       if (builtin) {
+        const requestId = activationRequests.current();
         await window.piDesktop.agent.runBuiltin(activeProjectId, builtin.name, commandMatch?.[2] ?? "");
-        applyActivation(await window.piDesktop.projects.activate(activeProjectId));
+        if (!activationRequests.isCurrent(requestId)) return;
+        await reapplyProjectActivation(activeProjectId, requestId);
         await refreshSessions(activeProjectId);
         return;
       }
@@ -785,8 +863,8 @@ function Composer() {
         <textarea
           ref={textareaRef}
           value={text}
-          disabled={!activeProjectId}
-          placeholder={activeProjectId ? "随心输入，/ 命令，@ 文件，! 运行命令" : "请先添加或选择项目"}
+          disabled={!activeProjectId || loadingProject}
+          placeholder={loadingProject ? "正在恢复会话…" : activeProjectId ? "随心输入，/ 命令，@ 文件，! 运行命令" : "请先添加或选择项目"}
           rows={3}
           onChange={(event) => setText(event.target.value)}
           onPaste={(event) => {
@@ -884,7 +962,7 @@ function Composer() {
               onClick={() => conversation?.running && activeProjectId
                 ? void window.piDesktop.agent.abort(activeProjectId)
                 : void send(false)}
-              disabled={!conversation?.running && (!text.trim() && attachments.length === 0 || sending)}
+              disabled={loadingProject || !conversation?.running && (!text.trim() && attachments.length === 0 || sending)}
               title={conversation?.running ? "停止" : "发送"}
             >
               {conversation?.running ? <Square size={13} fill="currentColor" /> : <ArrowUp size={19} strokeWidth={2.4} />}
@@ -930,8 +1008,10 @@ function ModelDialog() {
           const provider = String(model.provider);
           return (
             <button key={`${provider}/${id}`} onClick={async () => {
+              const requestId = activationRequests.current();
               await window.piDesktop.agent.setModel(projectId, provider, id);
-              useAppStore.getState().applyActivation(await window.piDesktop.projects.activate(projectId));
+              if (!activationRequests.isCurrent(requestId)) return;
+              await reapplyProjectActivation(projectId, requestId);
               closeDialog();
             }}>
               <span><strong>{String(model.name ?? id)}</strong><small>{provider}/{id}</small></span>
@@ -956,8 +1036,10 @@ function ThinkingDialog() {
       <div className="modal-list thinking-levels">
         {levels.map((level) => (
           <button key={level} onClick={async () => {
+            const requestId = activationRequests.current();
             await window.piDesktop.agent.setThinkingLevel(projectId, level);
-            useAppStore.getState().applyActivation(await window.piDesktop.projects.activate(projectId));
+            if (!activationRequests.isCurrent(requestId)) return;
+            await reapplyProjectActivation(projectId, requestId);
             closeDialog();
           }}>
             <span><strong>{level}</strong><small>{level === "off" ? "关闭模型推理" : "提高推理深度会增加响应时间和 Token 消耗"}</small></span>
@@ -1003,7 +1085,6 @@ function TreeBranch({ nodes, depth = 0, onFork }: { nodes: TreeNode[]; depth?: n
 
 function TreeDialog() {
   const projectId = useAppStore((state) => state.activeProjectId)!;
-  const applyActivation = useAppStore((state) => state.applyActivation);
   const [tree, setTree] = useState<TreeNode[]>([]);
   useEffect(() => {
     void window.piDesktop.agent.getTree(projectId).then((data) => setTree((data.tree ?? []) as TreeNode[]));
@@ -1013,8 +1094,10 @@ function TreeDialog() {
     <Modal title="会话树">
       <div className="tree-list">
         <TreeBranch nodes={tree} onFork={async (entryId) => {
+          const requestId = activationRequests.current();
           await window.piDesktop.agent.runBuiltin(projectId, "fork", entryId);
-          applyActivation(await window.piDesktop.projects.activate(projectId));
+          if (!activationRequests.isCurrent(requestId)) return;
+          await reapplyProjectActivation(projectId, requestId);
           await refreshSessions(projectId);
         }} />
       </div>
@@ -1187,64 +1270,96 @@ export function App() {
   const loadingProject = useAppStore((state) => state.loadingProject);
   const activeRuntimeId = useAppStore((state) => state.activeProjectId ? state.activeRuntimeIds[state.activeProjectId] : undefined);
   const extensionTitle = useAppStore((state) => activeRuntimeId ? state.extensionTitles[activeRuntimeId] : undefined);
+  const sessionLists = useAppStore((state) => state.sessions);
   const didStartInitialTask = useRef(false);
-  const [completionToast, setCompletionToast] = useState<{ id: string; text: string }>();
+  const didInitializeSessionLists = useRef(false);
+  const didSkipInitialSessionListsWrite = useRef(false);
 
   useEffect(() => {
     document.title = extensionTitle || "Pi Desktop";
   }, [extensionTitle]);
 
   useEffect(() => {
-    if (!completionToast) return;
-    const timer = window.setTimeout(() => setCompletionToast(undefined), 4000);
-    return () => window.clearTimeout(timer);
-  }, [completionToast]);
+    const cachedSessionLists = JSON.parse(
+      localStorage.getItem(SESSION_LISTS_CACHE_KEY) ?? "{}",
+    ) as Record<string, SessionSummary[]>;
+    for (const [projectId, projectSessions] of Object.entries(cachedSessionLists)) {
+      setSessions(projectId, projectSessions);
+    }
+    didInitializeSessionLists.current = true;
 
-  useEffect(() => {
     void window.piDesktop.settings.get().then(setSettings);
     void window.piDesktop.projects.list().then(async (projects) => {
       setProjects(projects);
       const initialProject = didStartInitialTask.current ? undefined : mostRecentlyUsedProject(projects);
-      if (initialProject) didStartInitialTask.current = true;
-      await Promise.all(projects.map(async (project) => {
-        try {
-          setSessions(project.id, await window.piDesktop.projects.listSessions(project.id));
-        } catch {
-          setSessions(project.id, []);
-        }
-      }));
-      if (initialProject) await beginNewTask(initialProject.id);
+      if (initialProject) {
+        didStartInitialTask.current = true;
+        void beginNewTask(initialProject.id);
+      }
+      await Promise.all(projects
+        .filter((project) => !(project.id in cachedSessionLists))
+        .map(async (project) => {
+          try {
+            setSessions(project.id, await window.piDesktop.projects.listSessions(project.id));
+          } catch {
+            setSessions(project.id, []);
+          }
+        }));
     });
-    return window.piDesktop.agent.onEvent((envelope) => {
+    const removeAgentListener = window.piDesktop.agent.onEvent((envelope) => {
       handleAgentEvent(envelope);
       if (envelope.event.type === "agent_settled") {
         void refreshSessions(envelope.projectId);
-        const projectName = useAppStore.getState().projects
+        const state = useAppStore.getState();
+        const projectName = state.projects
           .find((project) => project.id === envelope.projectId)!.name;
-        void window.piDesktop.notifications.taskComplete(projectName).then(({ foreground }) => {
-          if (foreground) {
-            setCompletionToast({ id: crypto.randomUUID(), text: `${projectName} 的回复已完成` });
-          }
+        const sessionPath = state.runtimeSessions[envelope.runtimeId];
+        if (state.activeRuntimeIds[envelope.projectId] === envelope.runtimeId) {
+          void window.piDesktop.sessionViews.set(
+            sessionPath,
+            state.conversations[envelope.projectId],
+          );
+        }
+        void window.piDesktop.notifications.taskComplete({
+          projectId: envelope.projectId,
+          projectName,
+          sessionPath,
         });
       }
     });
+    const removeNotificationListener = window.piDesktop.notifications.onOpenSession((notification) => {
+      useAppStore.getState().markSessionRead(notification.sessionPath);
+      void switchSession(notification.projectId, notification.sessionPath);
+    });
+    return () => {
+      removeAgentListener();
+      removeNotificationListener();
+    };
   }, [handleAgentEvent, setProjects, setSessions, setSettings]);
+
+  useEffect(() => {
+    if (!didInitializeSessionLists.current) return;
+    if (!didSkipInitialSessionListsWrite.current) {
+      didSkipInitialSessionListsWrite.current = true;
+      return;
+    }
+    localStorage.setItem(SESSION_LISTS_CACHE_KEY, JSON.stringify(sessionLists));
+  }, [sessionLists]);
 
   return (
     <div className="app-shell">
       <Sidebar />
       <main className="workspace">
         <div className="window-drag-region" />
-        {completionToast && (
-          <div className="completion-toast" key={completionToast.id}>
-            <Check size={15} />
-            <span>{completionToast.text}</span>
-          </div>
-        )}
-        {loadingProject ? (
+        {activeProjectId && conversation?.items.length ? (
+          <>
+            <Conversation items={conversation.items} running={conversation.running} />
+            {loadingProject && (
+              <div className="session-connecting"><LoaderCircle className="spin" size={14} />正在后台恢复会话…</div>
+            )}
+          </>
+        ) : loadingProject ? (
           <div className="loading-state"><LoaderCircle className="spin" />正在连接 Pi Agent…</div>
-        ) : activeProjectId && conversation?.items.length ? (
-          <Conversation items={conversation.items} running={conversation.running} />
         ) : (
           <EmptyState />
         )}

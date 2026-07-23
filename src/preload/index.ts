@@ -5,6 +5,7 @@ import type {
   DesktopApi,
   ExtensionUiResponse,
   PromptInput,
+  TaskCompleteNotification,
   ThinkingLevel,
 } from "../shared/contracts";
 import { IPC } from "../shared/contracts";
@@ -16,10 +17,12 @@ const api: DesktopApi = {
     remove: (projectId) => ipcRenderer.invoke(IPC.projectsRemove, projectId),
     setPinned: (projectId, pinned) => ipcRenderer.invoke(IPC.projectsSetPinned, projectId, pinned),
     reveal: (projectId) => ipcRenderer.invoke(IPC.projectsReveal, projectId),
-    activate: (projectId) => ipcRenderer.invoke(IPC.projectsActivate, projectId),
+    activate: (projectId, requestId) => ipcRenderer.invoke(IPC.projectsActivate, projectId, requestId),
     listSessions: (projectId) => ipcRenderer.invoke(IPC.projectsSessions, projectId),
-    switchSession: (projectId, sessionPath) =>
-      ipcRenderer.invoke(IPC.projectsSwitchSession, projectId, sessionPath),
+    switchSession: (projectId, sessionPath, requestId) =>
+      ipcRenderer.invoke(IPC.projectsSwitchSession, projectId, sessionPath, requestId),
+    deleteSession: (projectId, sessionPath) =>
+      ipcRenderer.invoke(IPC.projectsDeleteSession, projectId, sessionPath),
     searchFiles: (projectId, query) =>
       ipcRenderer.invoke(IPC.projectsSearchFiles, projectId, query),
   },
@@ -48,7 +51,18 @@ const api: DesktopApi = {
     },
   },
   notifications: {
-    taskComplete: (projectName) => ipcRenderer.invoke(IPC.notificationTaskComplete, projectName),
+    taskComplete: (notification) => ipcRenderer.invoke(IPC.notificationTaskComplete, notification),
+    onOpenSession: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, notification: TaskCompleteNotification) => {
+        listener(notification);
+      };
+      ipcRenderer.on(IPC.notificationOpenSession, handler);
+      return () => ipcRenderer.removeListener(IPC.notificationOpenSession, handler);
+    },
+  },
+  sessionViews: {
+    get: (sessionPath) => ipcRenderer.invoke(IPC.sessionViewGet, sessionPath),
+    set: (sessionPath, value) => ipcRenderer.invoke(IPC.sessionViewSet, sessionPath, value),
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

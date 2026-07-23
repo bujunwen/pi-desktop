@@ -1,15 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#30312d"/>
-      <stop offset="1" stop-color="#1f201e"/>
+    <linearGradient id="shell" x1="156" y1="112" x2="856" y2="908" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#353833"/>
+      <stop offset="0.52" stop-color="#252824"/>
+      <stop offset="1" stop-color="#171A18"/>
     </linearGradient>
-    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#58e0a4"/>
-      <stop offset="1" stop-color="#2fbd82"/>
+    <linearGradient id="mark" x1="310" y1="300" x2="730" y2="748" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AF2C2"/>
+      <stop offset="0.55" stop-color="#50D99A"/>
+      <stop offset="1" stop-color="#28B978"/>
     </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(512 472) rotate(90) scale(390)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#48DA96" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#48DA96" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="20" y="30" width="984" height="994" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#080A09" flood-opacity="0.5"/>
+    </filter>
+    <filter id="markShadow" x="250" y="260" width="540" height="560" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#071A11" flood-opacity="0.45"/>
+    </filter>
   </defs>
-  <rect x="44" y="44" width="936" height="936" rx="220" fill="url(#bg)"/>
-  <circle cx="512" cy="512" r="310" fill="url(#mark)"/>
-  <path d="M328 387c0-32 26-58 58-58h310v82h-58v236c0 27 13 40 40 40h31v82h-62c-69 0-109-40-109-110V411h-92v256H346V411h-18v-24Z" fill="#17362a"/>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="64" width="896" height="896" rx="216" fill="url(#shell)"/>
+    <rect x="65.5" y="65.5" width="893" height="893" rx="214.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="3"/>
+    <rect x="88" y="88" width="848" height="848" rx="194" fill="url(#glow)"/>
+  </g>
+
+  <g opacity="0.46">
+    <circle cx="314" cy="264" r="13" fill="#FF706A"/>
+    <circle cx="358" cy="264" r="13" fill="#F6C85F"/>
+    <circle cx="402" cy="264" r="13" fill="#58D68D"/>
+  </g>
+
+  <g filter="url(#markShadow)" fill="url(#mark)">
+    <path d="M302 368C302 338.2 326.2 314 356 314H704C733.8 314 758 338.2 758 368C758 397.8 733.8 422 704 422H672V647C672 694.7 685.8 712 722 712C735.7 712 747.5 709.8 760 705V801C741.5 809 719.2 813 693 813C611.5 813 566 766.5 566 677V422H456V759C456 788.8 431.8 813 402 813C372.2 813 348 788.8 348 759V422C322.6 418.2 302 396.2 302 368Z"/>
+  </g>
+
+  <path d="M270 700L318 748L270 796" fill="none" stroke="#E9FFF5" stroke-opacity="0.9" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="338" y="781" width="72" height="24" rx="12" fill="#E9FFF5" fill-opacity="0.9"/>
 </svg>

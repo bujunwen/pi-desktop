@@ -73,10 +73,14 @@ describe("AgentManager", () => {
     } as unknown as BrowserWindow;
     const manager = new AgentManager(() => window, settings, factory);
 
-    await manager.activate(project);
-    const sessionA = await manager.openSession(project, "/tmp/a.jsonl");
-    await manager.openSession(project, "/tmp/b.jsonl");
-    const sessionAAgain = await manager.openSession(project, "/tmp/a.jsonl");
+    manager.requestActivation(project.id, 1);
+    await manager.activate(project, 1);
+    manager.requestActivation(project.id, 2);
+    const sessionA = await manager.openSession(project, "/tmp/a.jsonl", 2);
+    manager.requestActivation(project.id, 3);
+    await manager.openSession(project, "/tmp/b.jsonl", 3);
+    manager.requestActivation(project.id, 4);
+    const sessionAAgain = await manager.openSession(project, "/tmp/a.jsonl", 4);
 
     expect(runtimes).toHaveLength(3);
     expect(sessionAAgain.runtimeId).toBe(sessionA.runtimeId);
@@ -87,6 +91,18 @@ describe("AgentManager", () => {
       runtimeId: sessionA.runtimeId,
       event: { type: "agent_start" },
     });
+
+    manager.requestActivation(project.id, 5);
+    await manager.openSession(project, "/tmp/b.jsonl", 5);
+    manager.requestActivation(project.id, 4);
+    await manager.openSession(project, "/tmp/a.jsonl", 4);
+    expect(manager.get(project.id)).toBe(runtimes[2]);
+
+    manager.removeSession(project.id, "/tmp/a.jsonl");
+    manager.requestActivation(project.id, 6);
+    const reopenedSessionA = await manager.openSession(project, "/tmp/a.jsonl", 6);
+    expect(runtimes).toHaveLength(4);
+    expect(reopenedSessionA.runtimeId).not.toBe(sessionA.runtimeId);
 
     destroyed = true;
     callbacks[1]({ type: "agent_settled" });

@@ -92,6 +92,7 @@ export interface AppState {
   setProjects(projects: ProjectRecord[]): void;
   setSessions(projectId: string, sessions: SessionSummary[]): void;
   addPendingSession(projectId: string, sessionPath: string, firstMessage: string): void;
+  removeSession(projectId: string, sessionPath: string): void;
   setSettings(settings: AgentSourceStatus): void;
   addProject(project: ProjectRecord): void;
   removeProject(projectId: string): void;
@@ -100,6 +101,7 @@ export interface AppState {
   dismissExtensionDialog(id: string): void;
   markSessionRead(sessionPath: string): void;
   beginActivation(projectId: string): void;
+  showCachedSession(projectId: string, sessionPath: string, conversation: ProjectConversation): void;
   applyActivation(activation: ProjectActivation): void;
   failActivation(projectId: string, message: string): void;
   addUserMessage(projectId: string, text: string, images?: ImageContent[]): void;
@@ -268,6 +270,40 @@ export const useAppStore = create<AppState>((set) => ({
       };
     }),
 
+  removeSession: (projectId, sessionPath) =>
+    set((state) => {
+      const removedRuntimeIds = Object.keys(state.runtimeSessions)
+        .filter((runtimeId) => state.runtimeSessions[runtimeId] === sessionPath);
+      const runtimeSessions = { ...state.runtimeSessions };
+      const runtimeRunning = { ...state.runtimeRunning };
+      const runtimeCompleted = { ...state.runtimeCompleted };
+      const activeRuntimeIds = { ...state.activeRuntimeIds };
+      for (const runtimeId of removedRuntimeIds) {
+        delete runtimeSessions[runtimeId];
+        delete runtimeRunning[runtimeId];
+        delete runtimeCompleted[runtimeId];
+        if (activeRuntimeIds[projectId] === runtimeId) delete activeRuntimeIds[projectId];
+      }
+      const conversation = state.conversations[projectId];
+      const removedActiveConversation = state.activeProjectId === projectId
+        && conversation?.sessionFile === sessionPath;
+      return {
+        sessions: {
+          ...state.sessions,
+          [projectId]: (state.sessions[projectId] ?? [])
+            .filter((session) => session.path !== sessionPath),
+        },
+        runtimeSessions,
+        runtimeRunning,
+        runtimeCompleted,
+        activeRuntimeIds,
+        activeProjectId: removedActiveConversation ? undefined : state.activeProjectId,
+        conversations: removedActiveConversation
+          ? { ...state.conversations, [projectId]: emptyConversation() }
+          : state.conversations,
+      };
+    }),
+
   setSettings: (settings) => set({ settings }),
 
   addProject: (project) =>
@@ -309,12 +345,32 @@ export const useAppStore = create<AppState>((set) => ({
     }),
 
   beginActivation: (projectId) =>
+    set((state) => {
+      const activeRuntimeIds = { ...state.activeRuntimeIds };
+      delete activeRuntimeIds[projectId];
+      return {
+        activeProjectId: projectId,
+        activeRuntimeIds,
+        loadingProject: true,
+        conversations: {
+          ...state.conversations,
+          [projectId]: emptyConversation(),
+        },
+      };
+    }),
+
+  showCachedSession: (projectId, sessionPath, conversation) =>
     set((state) => ({
-      activeProjectId: projectId,
-      loadingProject: true,
       conversations: {
         ...state.conversations,
-        [projectId]: state.conversations[projectId] ?? emptyConversation(),
+        [projectId]: {
+          ...conversation,
+          sessionFile: sessionPath,
+          running: false,
+          steering: [],
+          followUp: [],
+          currentAssistantId: undefined,
+        },
       },
     })),
 

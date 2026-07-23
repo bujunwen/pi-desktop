@@ -79,12 +79,55 @@ describe("renderer store", () => {
     ]);
   });
 
+  it("removes a session and its runtime state", () => {
+    const store = useAppStore.getState();
+    store.setSessions(project.id, [{
+      path: "/tmp/a.jsonl",
+      id: "a",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      modifiedAt: "2026-01-01T00:00:00.000Z",
+      messageCount: 1,
+      firstMessage: "hello",
+    }]);
+    store.beginActivation(project.id);
+    store.applyActivation(activation("runtime-a", "/tmp/a.jsonl"));
+    store.removeSession(project.id, "/tmp/a.jsonl");
+
+    const state = useAppStore.getState();
+    expect(state.sessions[project.id]).toEqual([]);
+    expect(state.activeProjectId).toBeUndefined();
+    expect(state.activeRuntimeIds[project.id]).toBeUndefined();
+    expect(state.runtimeSessions["runtime-a"]).toBeUndefined();
+    expect(state.conversations[project.id].items).toEqual([]);
+  });
+
   it("shows an immediate running state while a prompt is being accepted", () => {
     useAppStore.getState().addUserMessage(project.id, "hello");
     expect(useAppStore.getState().conversations[project.id].running).toBe(true);
 
     useAppStore.getState().failActivation(project.id, "failed");
     expect(useAppStore.getState().conversations[project.id].running).toBe(false);
+  });
+
+  it("shows a cached session while its runtime reconnects", () => {
+    const store = useAppStore.getState();
+    store.applyActivation(activation("runtime-a", "/tmp/a.jsonl"));
+    store.beginActivation(project.id);
+    store.showCachedSession(project.id, "/tmp/b.jsonl", {
+      items: [{ id: "cached", kind: "user", text: "cached message" }],
+      commands: [],
+      running: false,
+      steering: [],
+      followUp: [],
+    });
+
+    const state = useAppStore.getState();
+    expect(state.loadingProject).toBe(true);
+    expect(state.activeRuntimeIds[project.id]).toBeUndefined();
+    expect(state.conversations[project.id]).toMatchObject({
+      sessionFile: "/tmp/b.jsonl",
+      items: [{ id: "cached", text: "cached message" }],
+    });
   });
 
   it("routes background runtime events without polluting the active conversation", () => {
