@@ -34,7 +34,7 @@ const BUILTIN_COMMANDS: PiCommandInfo[] = [
 export class AgentRpcProcess {
   readonly #project: ProjectRecord;
   readonly #launch: AgentLaunchSpec;
-  readonly #initialSessionPath?: string;
+  readonly #initialSessionPath?: string | null;
   readonly #onEvent: (event: RpcRecord) => void;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #decoder = new JsonlDecoder<RpcRecord>();
@@ -46,7 +46,7 @@ export class AgentRpcProcess {
     project: ProjectRecord,
     launch: AgentLaunchSpec,
     onEvent: (event: RpcRecord) => void,
-    initialSessionPath?: string,
+    initialSessionPath?: string | null,
   ) {
     this.#project = project;
     this.#launch = launch;
@@ -64,15 +64,18 @@ export class AgentRpcProcess {
   }
 
   async snapshot(): Promise<AgentSnapshot> {
-    const [stateResponse, messagesResponse, commandsResponse] = await Promise.all([
+    const [stateResponse, messagesResponse, commandsResponse, statsResponse] = await Promise.all([
       this.request({ type: "get_state" }),
       this.request({ type: "get_messages" }),
       this.request({ type: "get_commands" }),
+      this.request({ type: "get_session_stats" }),
     ]);
 
     const state = this.#dataRecord(stateResponse);
     const messagesData = this.#dataRecord(messagesResponse);
     const commandData = this.#dataRecord(commandsResponse);
+    const stats = this.#dataRecord(statsResponse);
+    if (stats.contextUsage) state.contextUsage = stats.contextUsage;
     const discovered = (commandData.commands ?? []) as PiCommandInfo[];
 
     return {
@@ -103,6 +106,10 @@ export class AgentRpcProcess {
 
   async getTree(): Promise<Record<string, unknown>> {
     return this.#dataRecord(await this.request({ type: "get_tree" }));
+  }
+
+  async getSessionStats(): Promise<Record<string, unknown>> {
+    return this.#dataRecord(await this.request({ type: "get_session_stats" }));
   }
 
   async runBash(command: string): Promise<Record<string, unknown>> {
@@ -173,9 +180,11 @@ export class AgentRpcProcess {
 
   async #start(): Promise<void> {
     const rpcArguments = this.#launch.rpcEntry ? [] : ["--mode", "rpc"];
-    const sessionArguments = this.#initialSessionPath
-      ? ["--session", this.#initialSessionPath]
-      : ["--continue"];
+    const sessionArguments = this.#initialSessionPath === null
+      ? []
+      : this.#initialSessionPath
+        ? ["--session", this.#initialSessionPath]
+        : ["--continue"];
     const args = [
       ...this.#launch.argumentPrefix,
       ...rpcArguments,

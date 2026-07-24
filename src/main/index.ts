@@ -112,6 +112,12 @@ function registerIpc(): void {
     return agentManager.activate(project, requestId);
   });
 
+  ipcMain.handle(IPC.projectsStartNew, async (_event, projectId: string, requestId: number) => {
+    agentManager.requestActivation(projectId, requestId);
+    const project = await projectStore.touch(projectId);
+    return agentManager.startNewSession(project, requestId);
+  });
+
   ipcMain.handle(IPC.projectsSessions, async (_event, projectId: string) => {
     const project = await projectStore.get(projectId);
     return listProjectSessions(project.path);
@@ -179,6 +185,10 @@ function registerIpc(): void {
     agentManager.get(projectId).getTree(),
   );
 
+  ipcMain.handle(IPC.agentSessionStats, (_event, runtimeId: string) =>
+    agentManager.getRuntime(runtimeId).getSessionStats(),
+  );
+
   ipcMain.handle(
     IPC.agentShell,
     async (_event, projectId: string, command: string, includeInContext: boolean): Promise<ShellResult> => {
@@ -232,7 +242,6 @@ function registerIpc(): void {
   ipcMain.handle(IPC.settingsGet, () => settingsStore.status());
   ipcMain.handle(IPC.settingsUpdate, async (_event, settings: AppSettings) => {
     await settingsStore.update(settings);
-    agentManager.dispose();
     return settingsStore.status();
   });
 }

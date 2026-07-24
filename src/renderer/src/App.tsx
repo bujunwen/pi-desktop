@@ -24,8 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
-  AgentSource,
   AppSettings,
+  ContextUsage,
   ExtensionUiResponse,
   FileMatch,
   ImageContent,
@@ -140,11 +140,7 @@ async function beginNewTask(projectId: string): Promise<void> {
   const store = useAppStore.getState();
   store.beginActivation(projectId);
   try {
-    await window.piDesktop.projects.activate(projectId, requestId);
-    if (!activationRequests.isCurrent(requestId)) return;
-    await window.piDesktop.agent.runBuiltin(projectId, "new", "");
-    if (!activationRequests.isCurrent(requestId)) return;
-    const activation = await window.piDesktop.projects.activate(projectId, requestId);
+    const activation = await window.piDesktop.projects.startNew(projectId, requestId);
     if (!activationRequests.isCurrent(requestId)) return;
     store.applyActivation(activation);
     await refreshSessions(projectId);
@@ -316,7 +312,7 @@ function Sidebar() {
                     return (
                       <div className="session-row-wrap" key={session.path}>
                         <button
-                          className={`session-row ${conversation?.sessionFile === session.path ? "active" : ""}`}
+                          className={`session-row ${project.id === activeProjectId && conversation?.sessionFile === session.path ? "active" : ""}`}
                           title={sessionTitle(session)}
                           onClick={() => {
                             markSessionRead(session.path);
@@ -384,12 +380,16 @@ function ToolActivityLine({ item }: { item: ToolItem }) {
 function ToolActivity({ items, running }: { items: ToolItem[]; running: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const latest = items[items.length - 1];
+  const completedCount = items.filter((item) => item.status !== "running").length;
 
   if (running) {
     return (
       <section className="tool-activity running" aria-live="polite">
         <div className="tool-activity-wheel">
-          {items.slice(-2).map((item) => <ToolActivityLine key={item.id} item={item} />)}
+          <div className="tool-activity-current">
+            {items.slice(-2).map((item) => <ToolActivityLine key={item.id} item={item} />)}
+          </div>
+          <strong className="tool-activity-count">已完成 {completedCount} 项操作</strong>
         </div>
       </section>
     );
@@ -438,7 +438,27 @@ function ImageLightbox({ image, onClose }: { image: ImageContent; onClose(): voi
   );
 }
 
-function Conversation({ items, running }: { items: ConversationItem[]; running: boolean }) {
+function ReplyProgress({ startedAt }: { startedAt?: number }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => startedAt
+    ? Math.floor((Date.now() - startedAt) / 1000)
+    : 0);
+
+  useEffect(() => {
+    const update = () => setElapsedSeconds(startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0);
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+
+  return (
+    <div className="assistant-pending" aria-live="polite">
+      <span>正在思考 {elapsedSeconds}s</span>
+      <span className="thinking-progress"><i /><i /><i /></span>
+    </div>
+  );
+}
+
+function Conversation({ items, running, runStartedAt }: { items: ConversationItem[]; running: boolean; runStartedAt?: number }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const followFrameRef = useRef<number | undefined>(undefined);
@@ -447,10 +467,14 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
   const [previewImage, setPreviewImage] = useState<ImageContent>();
   const latestItem = items[items.length - 1];
   const latestPromptId = latestItem?.kind === "user" ? latestItem.id : undefined;
-  const toolActivity = useMemo(() => {
+  const { toolActivity, latestToolGroupId } = useMemo(() => {
     const byFirstToolId = new Map<string, ToolItem[]>();
-    for (const tools of consecutiveToolGroups(items)) byFirstToolId.set(tools[0].id, tools);
-    return byFirstToolId;
+    const groups = consecutiveToolGroups(items);
+    for (const tools of groups) byFirstToolId.set(tools[0].id, tools);
+    return {
+      toolActivity: byFirstToolId,
+      latestToolGroupId: groups.at(-1)?.[0].id,
+    };
   }, [items]);
 
   const scheduleFollow = () => {
@@ -523,9 +547,9 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
             </div>
           );
           if (item.kind === "assistant") {
+            if (!item.text) return null;
             return (
               <div key={item.id} className={`assistant-message ${item.done ? "" : "streaming"}`}>
-                {item.thinking && <details className="thinking"><summary>思考过程</summary>{item.thinking}</details>}
                 <MarkdownContent>{item.text}</MarkdownContent>
                 {!item.done && <span className="streaming-caret" />}
               </div>
@@ -538,18 +562,13 @@ function Conversation({ items, running }: { items: ConversationItem[]; running: 
               <ToolActivity
                 key={item.id}
                 items={group}
-                running={running && group[group.length - 1].id === latestItem?.id}
+                running={running && item.id === latestToolGroupId}
               />
             );
           }
           return <div key={item.id} className={`notice ${item.tone}`}>{item.text}</div>;
         })}
-        {running && latestItem?.kind === "user" && (
-          <div className="assistant-pending">
-            <LoaderCircle className="spin" size={15} />
-            <span>正在思考…</span>
-          </div>
-        )}
+        {running && <ReplyProgress startedAt={runStartedAt} />}
         <div className="conversation-end" />
       </div>
       {previewImage && <ImageLightbox image={previewImage} onClose={() => setPreviewImage(undefined)} />}
@@ -619,6 +638,7 @@ function Composer() {
   const addPendingSession = useAppStore((state) => state.addPendingSession);
   const addShellResult = useAppStore((state) => state.addShellResult);
   const openDialog = useAppStore((state) => state.openDialog);
+  const enterBehavior = useAppStore((state) => state.settings?.enterBehavior ?? "newline");
   const activeRuntimeId = useAppStore((state) => state.activeProjectId ? state.activeRuntimeIds[state.activeProjectId] : undefined);
   const extensionWidgets = useAppStore((state) => activeRuntimeId ? state.extensionWidgets[activeRuntimeId] ?? EMPTY_WIDGETS : EMPTY_WIDGETS);
   const editorRequest = useAppStore((state) => activeRuntimeId ? state.runtimeEditorRequests[activeRuntimeId] : undefined);
@@ -889,7 +909,7 @@ function Composer() {
               setSelectedIndex((index) => (index + direction + activeMenu.length) % activeMenu.length);
               return;
             }
-            if (event.key === "Enter" && slashMatch) {
+            if (enterBehavior === "shiftEnter" && event.key === "Enter" && event.shiftKey && slashMatch) {
               const exact = commandMatches.find((command) => command.name === slashMatch[1]);
               if (exact) {
                 event.preventDefault();
@@ -907,7 +927,7 @@ function Composer() {
               chooseFile(fileMatches[selectedIndex] ?? fileMatches[0]);
               return;
             }
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (enterBehavior === "shiftEnter" && event.key === "Enter" && event.shiftKey) {
               event.preventDefault();
               void send(event.altKey);
             }
@@ -915,6 +935,16 @@ function Composer() {
         />
         <div className="composer-bottom">
           <div className="composer-actions">
+            {conversation?.contextUsage && (
+              <span
+                className={`context-usage ${(conversation.contextUsage.percent ?? 0) >= 90 ? "warning" : ""}`}
+                title={conversation.contextUsage.tokens === null
+                  ? `Context 用量暂不可用 / ${conversation.contextUsage.contextWindow.toLocaleString()} tokens`
+                  : `${conversation.contextUsage.tokens.toLocaleString()} / ${conversation.contextUsage.contextWindow.toLocaleString()} tokens`}
+              >
+                Context {conversation.contextUsage.percent === null ? "?" : Math.round(conversation.contextUsage.percent)}%
+              </span>
+            )}
             {conversation?.model && (
               <div className="composer-control-wrap">
                 <button className="composer-select" onClick={() => void toggleModels()}>{conversation.model}</button>
@@ -1130,29 +1160,38 @@ function SettingsDialog() {
   const status = useAppStore((state) => state.settings);
   const setSettings = useAppStore((state) => state.setSettings);
   const closeDialog = useAppStore((state) => state.closeDialog);
-  const activeProjectId = useAppStore((state) => state.activeProjectId);
-  const [source, setSource] = useState<AgentSource>(status?.agentSource ?? "system");
-  const [customPath, setCustomPath] = useState(status?.customPiPath ?? "");
+  const [fontSize, setFontSize] = useState(status?.fontSize ?? 14);
+  const [enterBehavior, setEnterBehavior] = useState(status?.enterBehavior ?? "newline");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   return (
     <Modal title="设置">
       <div className="settings-body">
-        <h3>Pi Agent 来源</h3>
-        {(["system", "bundled", "custom"] as AgentSource[]).map((item) => (
-          <label className={`settings-option ${source === item ? "selected" : ""}`} key={item}>
-            <input type="radio" name="agent-source" checked={source === item} onChange={() => setSource(item)} />
-            <span>
-              <strong>{item === "system" ? "System Pi" : item === "bundled" ? "Bundled Pi" : "自定义路径"}</strong>
-              <small>{item === "system" ? "使用系统安装的 Pi" : item === "bundled" ? `随应用提供的 Pi ${status?.bundledVersion ?? ""}` : "使用指定的 Pi 可执行文件"}</small>
-            </span>
-          </label>
-        ))}
-        {source === "custom" && (
-          <input className="modal-search settings-path" value={customPath} onChange={(event) => setCustomPath(event.target.value)} placeholder="/absolute/path/to/pi" />
-        )}
-        {status && <p className="settings-current">当前：{status.version} · {status.resolvedPath}</p>}
+        <h3>界面字体大小</h3>
+        <div className="settings-range-row">
+          <input
+            aria-label="界面字体大小"
+            type="range"
+            min={12}
+            max={20}
+            step={1}
+            value={fontSize}
+            onChange={(event) => setFontSize(Number(event.target.value))}
+          />
+          <strong>{fontSize}px</strong>
+        </div>
+
+        <h3 className="settings-section-title">输入框回车行为</h3>
+        <label className={`settings-option compact ${enterBehavior === "newline" ? "selected" : ""}`}>
+          <input type="radio" name="enter-behavior" checked={enterBehavior === "newline"} onChange={() => setEnterBehavior("newline")} />
+          <span><strong>Enter 换行</strong><small>点击发送按钮提交内容</small></span>
+        </label>
+        <label className={`settings-option compact ${enterBehavior === "shiftEnter" ? "selected" : ""}`}>
+          <input type="radio" name="enter-behavior" checked={enterBehavior === "shiftEnter"} onChange={() => setEnterBehavior("shiftEnter")} />
+          <span><strong>Shift + Enter 发送</strong><small>Enter 换行</small></span>
+        </label>
+
         {error && <p className="settings-error">{error}</p>}
         <div className="modal-actions">
           <button onClick={closeDialog}>取消</button>
@@ -1161,18 +1200,18 @@ function SettingsDialog() {
             setError("");
             try {
               const next: AppSettings = {
-                agentSource: source,
-                ...(source === "custom" ? { customPiPath: customPath.trim() } : {}),
+                agentSource: "system",
+                fontSize,
+                enterBehavior,
               };
               setSettings(await window.piDesktop.settings.update(next));
-              if (activeProjectId) await activateProject(activeProjectId);
-              else closeDialog();
+              closeDialog();
             } catch (cause) {
               setError((cause as Error).message);
             } finally {
               setSaving(false);
             }
-          }}>保存并重启 Agent</button>
+          }}>保存</button>
         </div>
       </div>
     </Modal>
@@ -1264,6 +1303,7 @@ export function App() {
   const setProjects = useAppStore((state) => state.setProjects);
   const setSessions = useAppStore((state) => state.setSessions);
   const setSettings = useAppStore((state) => state.setSettings);
+  const settings = useAppStore((state) => state.settings);
   const handleAgentEvent = useAppStore((state) => state.handleAgentEvent);
   const activeProjectId = useAppStore((state) => state.activeProjectId);
   const conversation = useAppStore((state) => state.activeProjectId ? state.conversations[state.activeProjectId] : undefined);
@@ -1278,6 +1318,10 @@ export function App() {
   useEffect(() => {
     document.title = extensionTitle || "Pi Desktop";
   }, [extensionTitle]);
+
+  useEffect(() => {
+    if (settings) window.piDesktop.settings.setFontSize(settings.fontSize);
+  }, [settings?.fontSize]);
 
   useEffect(() => {
     const cachedSessionLists = JSON.parse(
@@ -1310,6 +1354,12 @@ export function App() {
       handleAgentEvent(envelope);
       if (envelope.event.type === "agent_settled") {
         void refreshSessions(envelope.projectId);
+        void window.piDesktop.agent.getSessionStats(envelope.runtimeId)
+          .then((stats) => useAppStore.getState().updateContextUsage(
+            envelope.projectId,
+            envelope.runtimeId,
+            stats.contextUsage as ContextUsage | undefined,
+          ));
         const state = useAppStore.getState();
         const projectName = state.projects
           .find((project) => project.id === envelope.projectId)!.name;
@@ -1353,7 +1403,7 @@ export function App() {
         <div className="window-drag-region" />
         {activeProjectId && conversation?.items.length ? (
           <>
-            <Conversation items={conversation.items} running={conversation.running} />
+            <Conversation items={conversation.items} running={conversation.running} runStartedAt={conversation.runStartedAt} />
             {loadingProject && (
               <div className="session-connecting"><LoaderCircle className="spin" size={14} />正在后台恢复会话…</div>
             )}

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   AgentEventEnvelope,
   AgentSourceStatus,
+  ContextUsage,
   ImageContent,
   PiCommandInfo,
   ProjectActivation,
@@ -33,7 +34,7 @@ export function consecutiveToolGroups(items: ConversationItem[]): ToolItem[][] {
 
   for (const item of items) {
     if (item.kind !== "tool") {
-      current = undefined;
+      if (item.kind !== "assistant" || item.text.trim()) current = undefined;
       continue;
     }
     if (!current) {
@@ -54,9 +55,11 @@ export interface ProjectConversation {
   followUp: string[];
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  contextUsage?: ContextUsage;
   sessionName?: string;
   sessionFile?: string;
   currentAssistantId?: string;
+  runStartedAt?: number;
 }
 
 export interface ExtensionDialogRequest {
@@ -78,6 +81,7 @@ export interface AppState {
   activeProjectId?: string;
   activeRuntimeIds: Record<string, string>;
   runtimeRunning: Record<string, boolean>;
+  runtimeStartedAt: Record<string, number>;
   runtimeCompleted: Record<string, boolean>;
   runtimeSessions: Record<string, string>;
   activeDialog?: AppDialog;
@@ -107,6 +111,7 @@ export interface AppState {
   addUserMessage(projectId: string, text: string, images?: ImageContent[]): void;
   addShellResult(projectId: string, command: string, result: ShellResult, included: boolean): void;
   clearConversation(projectId: string): void;
+  updateContextUsage(projectId: string, runtimeId: string, contextUsage?: ContextUsage): void;
   handleAgentEvent(envelope: AgentEventEnvelope): void;
 }
 
@@ -231,6 +236,7 @@ export const initialAppState = {
   sessions: {},
   activeRuntimeIds: {},
   runtimeRunning: {},
+  runtimeStartedAt: {},
   runtimeCompleted: {},
   runtimeSessions: {},
   conversations: {},
@@ -276,11 +282,13 @@ export const useAppStore = create<AppState>((set) => ({
         .filter((runtimeId) => state.runtimeSessions[runtimeId] === sessionPath);
       const runtimeSessions = { ...state.runtimeSessions };
       const runtimeRunning = { ...state.runtimeRunning };
+      const runtimeStartedAt = { ...state.runtimeStartedAt };
       const runtimeCompleted = { ...state.runtimeCompleted };
       const activeRuntimeIds = { ...state.activeRuntimeIds };
       for (const runtimeId of removedRuntimeIds) {
         delete runtimeSessions[runtimeId];
         delete runtimeRunning[runtimeId];
+        delete runtimeStartedAt[runtimeId];
         delete runtimeCompleted[runtimeId];
         if (activeRuntimeIds[projectId] === runtimeId) delete activeRuntimeIds[projectId];
       }
@@ -295,6 +303,7 @@ export const useAppStore = create<AppState>((set) => ({
         },
         runtimeSessions,
         runtimeRunning,
+        runtimeStartedAt,
         runtimeCompleted,
         activeRuntimeIds,
         activeProjectId: removedActiveConversation ? undefined : state.activeProjectId,
@@ -389,6 +398,12 @@ export const useAppStore = create<AppState>((set) => ({
           ...state.runtimeRunning,
           [activation.runtimeId]: Boolean(data.isStreaming),
         },
+        runtimeStartedAt: Boolean(data.isStreaming)
+          ? {
+              ...state.runtimeStartedAt,
+              [activation.runtimeId]: state.runtimeStartedAt[activation.runtimeId] ?? Date.now(),
+            }
+          : state.runtimeStartedAt,
         runtimeSessions: typeof data.sessionFile === "string"
           ? { ...state.runtimeSessions, [activation.runtimeId]: data.sessionFile }
           : state.runtimeSessions,
@@ -403,9 +418,13 @@ export const useAppStore = create<AppState>((set) => ({
             followUp: [],
             model: model ? String(model.id ?? "") : undefined,
             thinkingLevel: typeof data.thinkingLevel === "string" ? data.thinkingLevel as ThinkingLevel : undefined,
+            contextUsage: data.contextUsage as ContextUsage | undefined,
             sessionName: typeof data.sessionName === "string" ? data.sessionName : undefined,
             sessionFile: typeof data.sessionFile === "string" ? data.sessionFile : undefined,
             currentAssistantId: undefined,
+            runStartedAt: Boolean(data.isStreaming)
+              ? state.runtimeStartedAt[activation.runtimeId] ?? Date.now()
+              : undefined,
           },
         },
       };
@@ -430,12 +449,18 @@ export const useAppStore = create<AppState>((set) => ({
   addUserMessage: (projectId, text, images) =>
     set((state) => {
       const conversation = state.conversations[projectId] ?? emptyConversation();
+      const runtimeId = state.activeRuntimeIds[projectId];
+      const startedAt = Date.now();
       return {
+        runtimeStartedAt: runtimeId
+          ? { ...state.runtimeStartedAt, [runtimeId]: startedAt }
+          : state.runtimeStartedAt,
         conversations: {
           ...state.conversations,
           [projectId]: {
             ...conversation,
             running: true,
+            runStartedAt: startedAt,
             items: [...conversation.items, {
               id: crypto.randomUUID(),
               kind: "user",
@@ -485,6 +510,19 @@ export const useAppStore = create<AppState>((set) => ({
       },
     })),
 
+  updateContextUsage: (projectId, runtimeId, contextUsage) =>
+    set((state) => {
+      if (state.activeRuntimeIds[projectId] !== runtimeId) return state;
+      const conversation = state.conversations[projectId];
+      if (!conversation) return state;
+      return {
+        conversations: {
+          ...state.conversations,
+          [projectId]: { ...conversation, contextUsage },
+        },
+      };
+    }),
+
   handleAgentEvent: ({ projectId, runtimeId, event }) =>
     set((state) => {
       let extensionDialogs = state.extensionDialogs;
@@ -493,13 +531,18 @@ export const useAppStore = create<AppState>((set) => ({
       let runtimeEditorRequests = state.runtimeEditorRequests;
       let extensionTitles = state.extensionTitles;
       const runtimeRunning = { ...state.runtimeRunning };
+      const runtimeStartedAt = { ...state.runtimeStartedAt };
       const runtimeCompleted = { ...state.runtimeCompleted };
 
       if (event.type === "agent_start") {
         runtimeRunning[runtimeId] = true;
+        runtimeStartedAt[runtimeId] ??= Date.now();
         runtimeCompleted[runtimeId] = false;
       }
-      if (event.type === "agent_settled" || event.type === "agent_process_exit") runtimeRunning[runtimeId] = false;
+      if (event.type === "agent_settled" || event.type === "agent_process_exit") {
+        runtimeRunning[runtimeId] = false;
+        delete runtimeStartedAt[runtimeId];
+      }
       if (event.type === "agent_settled") {
         const isVisible = state.activeProjectId === projectId
           && state.activeRuntimeIds[projectId] === runtimeId;
@@ -550,6 +593,7 @@ export const useAppStore = create<AppState>((set) => ({
 
       const base = {
         runtimeRunning,
+        runtimeStartedAt,
         runtimeCompleted,
         extensionDialogs,
         extensionStatuses,
@@ -565,10 +609,12 @@ export const useAppStore = create<AppState>((set) => ({
       switch (event.type) {
         case "agent_start":
           next.running = true;
+          next.runStartedAt ??= runtimeStartedAt[runtimeId];
           break;
         case "agent_settled":
           next.running = false;
           next.currentAssistantId = undefined;
+          next.runStartedAt = undefined;
           break;
         case "message_update": {
           const update = event.assistantMessageEvent as Record<string, unknown> | undefined;

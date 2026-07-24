@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Keyboard-first desktop interface for the Pi coding agent",
   "author": "Pi Desktop Contributors",

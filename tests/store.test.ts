@@ -34,6 +34,7 @@ beforeEach(() => {
     sessions: {},
     activeRuntimeIds: {},
     runtimeRunning: {},
+    runtimeStartedAt: {},
     runtimeSessions: {},
     conversations: {},
     extensionDialogs: [],
@@ -59,6 +60,7 @@ describe("renderer store", () => {
     });
     const groups = consecutiveToolGroups([
       tool("first"),
+      { id: "hidden-thinking", kind: "assistant", text: "", thinking: "reason", done: true },
       tool("second"),
       { id: "reply", kind: "assistant", text: "checking", thinking: "", done: true },
       tool("later"),
@@ -139,13 +141,22 @@ describe("renderer store", () => {
     store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-a", event: { type: "agent_start" } });
     expect(useAppStore.getState().runtimeRunning["runtime-a"]).toBe(true);
     expect(useAppStore.getState().conversations[project.id].running).toBe(false);
+
+    store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-b", event: { type: "agent_start" } });
+    expect(useAppStore.getState().runtimeRunning).toMatchObject({ "runtime-a": true, "runtime-b": true });
+    expect(useAppStore.getState().runtimeStartedAt).toMatchObject({
+      "runtime-a": expect.any(Number),
+      "runtime-b": expect.any(Number),
+    });
+    expect(useAppStore.getState().conversations[project.id].running).toBe(true);
+
     store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-a", event: { type: "agent_settled" } });
+    expect(useAppStore.getState().runtimeRunning["runtime-b"]).toBe(true);
+    expect(useAppStore.getState().runtimeStartedAt["runtime-a"]).toBeUndefined();
+    expect(useAppStore.getState().runtimeStartedAt["runtime-b"]).toEqual(expect.any(Number));
     expect(useAppStore.getState().runtimeCompleted["runtime-a"]).toBe(true);
     useAppStore.getState().markSessionRead("/tmp/a.jsonl");
     expect(useAppStore.getState().runtimeCompleted["runtime-a"]).toBe(false);
-
-    store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-b", event: { type: "agent_start" } });
-    expect(useAppStore.getState().conversations[project.id].running).toBe(true);
 
     store.handleAgentEvent({ projectId: project.id, runtimeId: "runtime-b", event: { type: "agent_settled" } });
     expect(useAppStore.getState().runtimeCompleted["runtime-b"]).toBe(false);

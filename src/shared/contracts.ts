@@ -1,6 +1,13 @@
 export type ProjectTrust = "trusted" | "untrusted";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type AgentSource = "system" | "bundled" | "custom";
+export type EnterBehavior = "newline" | "shiftEnter";
+
+export interface ContextUsage {
+  tokens: number | null;
+  contextWindow: number;
+  percent: number | null;
+}
 
 export interface ProjectRecord {
   id: string;
@@ -15,6 +22,8 @@ export interface ProjectRecord {
 export interface AppSettings {
   agentSource: AgentSource;
   customPiPath?: string;
+  fontSize: number;
+  enterBehavior: EnterBehavior;
 }
 
 export interface AgentSourceStatus extends AppSettings {
@@ -99,6 +108,7 @@ export interface DesktopApi {
     setPinned(projectId: string, pinned: boolean): Promise<ProjectRecord[]>;
     reveal(projectId: string): Promise<void>;
     activate(projectId: string, requestId: number): Promise<ProjectActivation>;
+    startNew(projectId: string, requestId: number): Promise<ProjectActivation>;
     listSessions(projectId: string): Promise<SessionSummary[]>;
     switchSession(projectId: string, sessionPath: string, requestId: number): Promise<ProjectActivation>;
     deleteSession(projectId: string, sessionPath: string): Promise<void>;
@@ -113,6 +123,7 @@ export interface DesktopApi {
     getThinkingLevels(projectId: string): Promise<ThinkingLevel[]>;
     setThinkingLevel(projectId: string, level: ThinkingLevel): Promise<void>;
     getTree(projectId: string): Promise<Record<string, unknown>>;
+    getSessionStats(runtimeId: string): Promise<Record<string, unknown>>;
     runShell(projectId: string, command: string, includeInContext: boolean): Promise<ShellResult>;
     respondExtensionUi(runtimeId: string, response: ExtensionUiResponse): Promise<void>;
     onEvent(listener: (envelope: AgentEventEnvelope) => void): () => void;
@@ -128,6 +139,7 @@ export interface DesktopApi {
   settings: {
     get(): Promise<AgentSourceStatus>;
     update(settings: AppSettings): Promise<AgentSourceStatus>;
+    setFontSize(fontSize: number): void;
   };
 }
 
@@ -138,6 +150,7 @@ export const IPC = {
   projectsSetPinned: "projects:set-pinned",
   projectsReveal: "projects:reveal",
   projectsActivate: "projects:activate",
+  projectsStartNew: "projects:start-new",
   projectsSessions: "projects:sessions",
   projectsSwitchSession: "projects:switch-session",
   projectsDeleteSession: "projects:delete-session",
@@ -150,6 +163,7 @@ export const IPC = {
   agentThinkingLevels: "agent:thinking-levels",
   agentSetThinkingLevel: "agent:set-thinking-level",
   agentTree: "agent:tree",
+  agentSessionStats: "agent:session-stats",
   agentShell: "agent:shell",
   agentExtensionUiResponse: "agent:extension-ui-response",
   agentEvent: "agent:event",

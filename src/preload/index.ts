@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webFrame } from "electron";
 import type {
   AgentEventEnvelope,
   AppSettings,
@@ -18,6 +18,7 @@ const api: DesktopApi = {
     setPinned: (projectId, pinned) => ipcRenderer.invoke(IPC.projectsSetPinned, projectId, pinned),
     reveal: (projectId) => ipcRenderer.invoke(IPC.projectsReveal, projectId),
     activate: (projectId, requestId) => ipcRenderer.invoke(IPC.projectsActivate, projectId, requestId),
+    startNew: (projectId, requestId) => ipcRenderer.invoke(IPC.projectsStartNew, projectId, requestId),
     listSessions: (projectId) => ipcRenderer.invoke(IPC.projectsSessions, projectId),
     switchSession: (projectId, sessionPath, requestId) =>
       ipcRenderer.invoke(IPC.projectsSwitchSession, projectId, sessionPath, requestId),
@@ -38,6 +39,7 @@ const api: DesktopApi = {
     setThinkingLevel: (projectId, level: ThinkingLevel) =>
       ipcRenderer.invoke(IPC.agentSetThinkingLevel, projectId, level),
     getTree: (projectId) => ipcRenderer.invoke(IPC.agentTree, projectId),
+    getSessionStats: (runtimeId) => ipcRenderer.invoke(IPC.agentSessionStats, runtimeId),
     runShell: (projectId, command, includeInContext) =>
       ipcRenderer.invoke(IPC.agentShell, projectId, command, includeInContext),
     respondExtensionUi: (runtimeId: string, response: ExtensionUiResponse) =>
@@ -67,6 +69,7 @@ const api: DesktopApi = {
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (settings: AppSettings) => ipcRenderer.invoke(IPC.settingsUpdate, settings),
+    setFontSize: (fontSize) => webFrame.setZoomFactor(fontSize / 14),
   },
 };
 

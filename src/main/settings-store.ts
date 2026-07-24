@@ -2,14 +2,18 @@ import { execFile } from "node:child_process";
 import { findPackageJSON } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { access, mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
-import { constants, existsSync } from "node:fs";
+import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import type { AgentSourceStatus, AppSettings } from "../shared/contracts";
 
 const execFileAsync = promisify(execFile);
 const BUNDLED_PI_VERSION = "0.81.1";
-const DEFAULT_SETTINGS: AppSettings = { agentSource: "system" };
+const DEFAULT_SETTINGS: AppSettings = {
+  agentSource: "system",
+  fontSize: 14,
+  enterBehavior: "newline",
+};
 
 export type ShellEnvironmentLoader = () => Promise<NodeJS.ProcessEnv>;
 let loginShellEnvironmentPromise: Promise<NodeJS.ProcessEnv> | undefined;
@@ -161,7 +165,14 @@ export class SettingsStore {
 
   async get(): Promise<AppSettings> {
     try {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(await readFile(this.#filePath, "utf8")) as AppSettings };
+      const saved = JSON.parse(await readFile(this.#filePath, "utf8")) as Partial<AppSettings>;
+      return {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        agentSource: "system",
+        customPiPath: undefined,
+        enterBehavior: saved.enterBehavior === "shiftEnter" ? "shiftEnter" : "newline",
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ...DEFAULT_SETTINGS };
       throw error;
@@ -169,13 +180,14 @@ export class SettingsStore {
   }
 
   async update(settings: AppSettings): Promise<void> {
-    if (settings.agentSource === "custom") {
-      if (!settings.customPiPath) throw new Error("自定义 Pi 路径不能为空");
-      await access(settings.customPiPath, constants.X_OK);
-    }
+    const persisted: AppSettings = {
+      agentSource: "system",
+      fontSize: settings.fontSize,
+      enterBehavior: settings.enterBehavior,
+    };
     await mkdir(dirname(this.#filePath), { recursive: true });
     const temporaryPath = `${this.#filePath}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    await writeFile(temporaryPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
     await rename(temporaryPath, this.#filePath);
   }
 

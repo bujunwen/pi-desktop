@@ -26,14 +26,15 @@ afterEach(async () => {
 });
 
 describe("SettingsStore", () => {
-  it("resolves the bundled RPC entry through Electron's Node runtime", async () => {
+  it("normalizes the hidden agent source setting to System Pi", async () => {
     const store = new SettingsStore(await temporaryDirectory(), currentEnvironment);
-    await store.update({ agentSource: "bundled" });
+    await store.update({ agentSource: "bundled", fontSize: 14, enterBehavior: "newline" });
 
-    const launch = await store.launchSpec();
-    expect(launch.rpcEntry).toBe(true);
-    expect(launch.argumentPrefix[0]).toMatch(/pi-coding-agent.+rpc-entry\.js$/);
-    expect(launch.env.ELECTRON_RUN_AS_NODE).toBe("1");
+    expect(await store.get()).toMatchObject({
+      agentSource: "system",
+      fontSize: 14,
+      enterBehavior: "newline",
+    });
   });
 
   it("launches a shebang-based System Pi with an absolute Node path under Finder's minimal PATH", async () => {
@@ -60,15 +61,20 @@ describe("SettingsStore", () => {
     expect((await store.status()).version).toBe("9.9.9");
   });
 
-  it("validates and persists a custom executable", async () => {
-    const directory = await temporaryDirectory();
-    const executable = join(directory, "pi-custom");
-    await writeFile(executable, "#!/bin/sh\necho 1.0.0\n");
-    await chmod(executable, 0o755);
-    const store = new SettingsStore(directory, currentEnvironment);
+  it("persists interface settings without exposing another agent source", async () => {
+    const store = new SettingsStore(await temporaryDirectory(), currentEnvironment);
 
-    await store.update({ agentSource: "custom", customPiPath: executable });
-    expect(await store.get()).toEqual({ agentSource: "custom", customPiPath: executable });
-    expect((await store.launchSpec()).executable).toBe(executable);
+    await store.update({
+      agentSource: "custom",
+      customPiPath: "/tmp/pi-custom",
+      fontSize: 16,
+      enterBehavior: "shiftEnter",
+    });
+    expect(await store.get()).toEqual({
+      agentSource: "system",
+      customPiPath: undefined,
+      fontSize: 16,
+      enterBehavior: "shiftEnter",
+    });
   });
 });

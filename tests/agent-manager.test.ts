@@ -46,6 +46,7 @@ class FakeRuntime implements AgentRuntime {
   async getThinkingLevels() { return ["off" as const]; }
   async setThinkingLevel() {}
   async getTree() { return {}; }
+  async getSessionStats() { return {}; }
   async runBash() { return {}; }
   async prompt() {}
   async abort() {}
@@ -110,5 +111,29 @@ describe("AgentManager", () => {
 
     manager.dispose();
     expect(runtimes.every((runtime) => !runtime.isAlive)).toBe(true);
+  });
+
+  it("creates an independent runtime for every new task", async () => {
+    const initialSessionPaths: Array<string | null | undefined> = [];
+    const runtimes: FakeRuntime[] = [];
+    const factory: AgentRuntimeFactory = (_project, _launch, _onEvent, sessionPath) => {
+      initialSessionPaths.push(sessionPath);
+      const runtime = new FakeRuntime(`/tmp/new-${runtimes.length}.jsonl`);
+      runtimes.push(runtime);
+      return runtime;
+    };
+    const settings = { launchSpec: async () => launch } as unknown as SettingsStore;
+    const manager = new AgentManager(() => undefined, settings, factory);
+
+    manager.requestActivation(project.id, 1);
+    const first = await manager.startNewSession(project, 1);
+    manager.requestActivation(project.id, 2);
+    const second = await manager.startNewSession(project, 2);
+
+    expect(runtimes).toHaveLength(2);
+    expect(initialSessionPaths).toEqual([null, null]);
+    expect(second.runtimeId).not.toBe(first.runtimeId);
+    expect(runtimes[0].isAlive).toBe(true);
+    expect(manager.get(project.id)).toBe(runtimes[1]);
   });
 });

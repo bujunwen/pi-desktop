@@ -443,6 +443,29 @@ button {
   font-size: 12px;
 }
 
+.thinking-progress {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 32px;
+}
+
+.thinking-progress i {
+  width: 4px;
+  height: 4px;
+  background: #a5a69f;
+  border-radius: 50%;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-progress i:nth-child(2) { animation-delay: 160ms; }
+.thinking-progress i:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes thinking-pulse {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
 .assistant-message {
   margin: 18px 0;
   color: #deded8;
@@ -486,18 +509,6 @@ button {
   line-height: 1.55;
 }
 
-.thinking {
-  padding: 8px 0 12px;
-  color: #8f908a;
-  font-size: 12px;
-  white-space: pre-wrap;
-}
-
-.thinking summary {
-  margin-bottom: 6px;
-  cursor: pointer;
-}
-
 .streaming-caret {
   display: inline-block;
   width: 6px;
@@ -523,9 +534,25 @@ button {
 }
 
 .tool-activity-wheel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
   height: 58px;
   padding: 5px 11px;
   overflow: hidden;
+}
+
+.tool-activity-current {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tool-activity-count {
+  color: #8f908a;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .tool-activity-line {
@@ -809,6 +836,17 @@ button {
 
 .composer-control-wrap {
   position: relative;
+}
+
+.context-usage {
+  padding: 0 3px;
+  color: #9fa09a;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.context-usage.warning {
+  color: #e3a17c;
 }
 
 .composer-select {
@@ -1269,6 +1307,32 @@ button {
   font-weight: 600;
 }
 
+.settings-body h3.settings-section-title {
+  margin-top: 22px;
+}
+
+.settings-range-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  color: #d6d7d0;
+  background: #252623;
+  border: 1px solid #3e3f3b;
+  border-radius: 9px;
+}
+
+.settings-range-row input {
+  width: 100%;
+  accent-color: #d7d8d1;
+}
+
+.settings-range-row strong {
+  font-size: 12px;
+  text-align: right;
+}
+
 .settings-option {
   display: flex;
   align-items: center;
@@ -1285,6 +1349,10 @@ button {
 .settings-option.selected {
   border-color: #777970;
   background: #343531;
+}
+
+.settings-option.compact {
+  min-height: 50px;
 }
 
 .settings-option > span {

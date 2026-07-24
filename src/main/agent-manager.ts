@@ -28,6 +28,7 @@ export interface AgentRuntime {
   getThinkingLevels(): Promise<ThinkingLevel[]>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
   getTree(): Promise<Record<string, unknown>>;
+  getSessionStats(): Promise<Record<string, unknown>>;
   runBash(command: string): Promise<Record<string, unknown>>;
   prompt(message: string, images?: ImageContent[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
   abort(): Promise<void>;
@@ -40,7 +41,7 @@ export type AgentRuntimeFactory = (
   project: ProjectRecord,
   launch: AgentLaunchSpec,
   onEvent: (event: RpcRecord) => void,
-  sessionPath?: string,
+  sessionPath?: string | null,
 ) => AgentRuntime;
 
 const defaultFactory: AgentRuntimeFactory = (project, launch, onEvent, sessionPath) =>
@@ -92,6 +93,15 @@ export class AgentManager {
     if (active?.isAlive) return this.#activation(activeId!, await active.snapshot());
 
     const { runtimeId, runtime } = await this.#create(project);
+    const activation = this.#activation(runtimeId, await runtime.activate());
+    if (this.#isCurrentActivation(project.id, requestId)) {
+      this.#activeByProject.set(project.id, runtimeId);
+    }
+    return activation;
+  }
+
+  async startNewSession(project: ProjectRecord, requestId: number): Promise<ProjectActivation> {
+    const { runtimeId, runtime } = await this.#create(project, null);
     const activation = this.#activation(runtimeId, await runtime.activate());
     if (this.#isCurrentActivation(project.id, requestId)) {
       this.#activeByProject.set(project.id, runtimeId);
@@ -151,7 +161,7 @@ export class AgentManager {
     this.#sessionByRuntime.clear();
   }
 
-  async #create(project: ProjectRecord, sessionPath?: string): Promise<{ runtimeId: string; runtime: AgentRuntime }> {
+  async #create(project: ProjectRecord, sessionPath?: string | null): Promise<{ runtimeId: string; runtime: AgentRuntime }> {
     const runtimeId = randomUUID();
     const launch = await this.#settings.launchSpec();
     const runtime = this.#factory(
